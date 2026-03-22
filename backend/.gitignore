@@ -29,3 +29,7 @@ build/
 # IDEs
 .idea/
 .vscode/
+
+# SQLite database files
+*.db
+data/

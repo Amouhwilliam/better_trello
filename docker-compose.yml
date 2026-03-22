@@ -1,11 +1,26 @@
 services:
   api:
     build:
-      context: ./api
+      context: ./backend
     ports:
       - "8000:8000"
     volumes:
-      - ./api:/app
+      - ./backend:/app
+      - sqlite_data:/app/data   # persists the SQLite DB file across restarts
+    environment:
+      - DATABASE_URL=sqlite:////app/data/tasks.db
+      - AUTO_COMPLETE_PROJECT=false
+    restart: unless-stopped
+
+  datasette:
+    image: datasetteproject/datasette
+    ports:
+      - "8081:8001"
+    volumes:
+      - sqlite_data:/data
+    command: ["datasette", "/data/tasks.db", "--host", "0.0.0.0", "--port", "8001"]
+    depends_on:
+      - api
     restart: unless-stopped
 
   frontend:
@@ -23,3 +38,6 @@ services:
     depends_on:
       - api
     restart: unless-stopped
+
+volumes:
+  sqlite_data:   # named volume — Docker manages the lifecycle of the DB file
