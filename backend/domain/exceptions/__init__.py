@@ -20,3 +20,11 @@ class ProjectNotFoundError(DomainException):
 
 class TaskAlreadyLinkedError(DomainException):
     pass
+
+
+class UserNotFoundError(DomainException):
+    pass
+
+
+class UserAlreadyExistsError(DomainException):
+    pass

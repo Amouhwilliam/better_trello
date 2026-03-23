@@ -35,6 +35,12 @@ def create_project(client: TestClient, title: str = "Project", days: int = 30) -
     return r.json()
 
 
+def create_user(client: TestClient, email: str = "worker@example.com") -> dict:
+    r = client.post("/users", json={"fullname": "Worker", "email": email, "password": "pass1234"})
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
 # ---------------------------------------------------------------------------
 # POST /tasks
 # ---------------------------------------------------------------------------
@@ -249,3 +255,65 @@ class TestReopenTask:
     def test_returns_404_for_unknown(self, client: TestClient):
         r = client.patch("/tasks/00000000-0000-0000-0000-000000000000/reopen")
         assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# PATCH /tasks/{id}/assign/{user_id}  &  PATCH /tasks/{id}/unassign
+# ---------------------------------------------------------------------------
+
+class TestAssignTask:
+    def test_assign_sets_assignee_id(self, client: TestClient):
+        user = create_user(client, email="assign_test1@x.com")
+        t = create_task(client, title="Assignable")
+        r = client.patch(f"/tasks/{t['id']}/assign/{user['id']}")
+        assert r.status_code == 200
+        assert r.json()["assignee_id"] == user["id"]
+
+    def test_assign_is_persisted(self, client: TestClient):
+        user = create_user(client, email="assign_test2@x.com")
+        t = create_task(client, title="Persist assign")
+        client.patch(f"/tasks/{t['id']}/assign/{user['id']}")
+        assert client.get(f"/tasks/{t['id']}").json()["assignee_id"] == user["id"]
+
+    def test_assign_unknown_user_returns_404(self, client: TestClient):
+        t = create_task(client, title="No user assign")
+        r = client.patch(f"/tasks/{t['id']}/assign/00000000-0000-0000-0000-000000000000")
+        assert r.status_code == 404
+
+    def test_assign_unknown_task_returns_404(self, client: TestClient):
+        user = create_user(client, email="assign_test3@x.com")
+        r = client.patch(f"/tasks/00000000-0000-0000-0000-000000000000/assign/{user['id']}")
+        assert r.status_code == 404
+
+    def test_reassign_to_different_user(self, client: TestClient):
+        u1 = create_user(client, email="assign_u1@x.com")
+        u2 = create_user(client, email="assign_u2@x.com")
+        t = create_task(client, title="Reassign")
+        client.patch(f"/tasks/{t['id']}/assign/{u1['id']}")
+        r = client.patch(f"/tasks/{t['id']}/assign/{u2['id']}")
+        assert r.json()["assignee_id"] == u2["id"]
+
+    def test_unassign_clears_assignee(self, client: TestClient):
+        user = create_user(client, email="unassign_test@x.com")
+        t = create_task(client, title="Unassignable")
+        client.patch(f"/tasks/{t['id']}/assign/{user['id']}")
+        r = client.patch(f"/tasks/{t['id']}/unassign")
+        assert r.status_code == 200
+        assert r.json()["assignee_id"] is None
+
+    def test_unassign_is_persisted(self, client: TestClient):
+        user = create_user(client, email="unassign_persist@x.com")
+        t = create_task(client, title="Unassign persist")
+        client.patch(f"/tasks/{t['id']}/assign/{user['id']}")
+        client.patch(f"/tasks/{t['id']}/unassign")
+        assert client.get(f"/tasks/{t['id']}").json()["assignee_id"] is None
+
+    def test_unassign_idempotent(self, client: TestClient):
+        t = create_task(client, title="Already unassigned")
+        r = client.patch(f"/tasks/{t['id']}/unassign")
+        assert r.status_code == 200
+        assert r.json()["assignee_id"] is None
+
+    def test_task_response_has_assignee_id_field(self, client: TestClient):
+        t = create_task(client, title="Field check")
+        assert "assignee_id" in t

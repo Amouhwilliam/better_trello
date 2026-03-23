@@ -15,6 +15,7 @@ class Task:
     description: Optional[str] = None
     completed: bool = False
     project_id: Optional[UUID] = None
+    assignee_id: Optional[UUID] = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     _pending_events: list = field(default_factory=list, init=False, repr=False, compare=False)
@@ -51,17 +52,25 @@ class Task:
         self.project_id = None
         self.updated_at = datetime.now(timezone.utc)
 
+    def assign_to_user(self, user_id: UUID) -> None:
+        self.assignee_id = user_id
+        self.updated_at = datetime.now(timezone.utc)
+
+    def unassign(self) -> None:
+        self.assignee_id = None
+        self.updated_at = datetime.now(timezone.utc)
+
     def mark_complete(self) -> None:
         if not self.completed:
             self.completed = True
             self.updated_at = datetime.now(timezone.utc)
-            self._pending_events.append(TaskCompleted(task_id=self.id))
+            self._pending_events.append(TaskCompleted(task_id=self.id, task_title=self.title))
 
     def reopen(self) -> None:
         if self.completed:
             self.completed = False
             self.updated_at = datetime.now(timezone.utc)
-            self._pending_events.append(TaskReopened(task_id=self.id, project_id=self.project_id))
+            self._pending_events.append(TaskReopened(task_id=self.id, task_title=self.title, project_id=self.project_id))
 
     def adjust_deadline(self, new_deadline: datetime) -> None:
         """Force-adjust deadline (used when project deadline is moved earlier)."""

@@ -177,6 +177,42 @@ class TestTaskOverdue:
         assert task.is_overdue() is False
 
 
+class TestTaskAssignment:
+    def test_assign_to_user_sets_assignee_id(self, task: Task):
+        from uuid import uuid4
+        user_id = uuid4()
+        task.assign_to_user(user_id)
+        assert task.assignee_id == user_id
+
+    def test_assign_to_user_sets_updated_at(self, task: Task):
+        from uuid import uuid4
+        before = task.updated_at
+        task.assign_to_user(uuid4())
+        assert task.updated_at >= before
+
+    def test_unassign_clears_assignee_id(self, task: Task):
+        from uuid import uuid4
+        task.assign_to_user(uuid4())
+        task.unassign()
+        assert task.assignee_id is None
+
+    def test_unassign_sets_updated_at(self, task: Task):
+        from uuid import uuid4
+        task.assign_to_user(uuid4())
+        before = task.updated_at
+        task.unassign()
+        assert task.updated_at >= before
+
+    def test_unassign_idempotent_when_already_unassigned(self, task: Task):
+        assert task.assignee_id is None
+        task.unassign()  # must not raise
+        assert task.assignee_id is None
+
+    def test_assign_defaults_to_none(self):
+        task = Task(title="T", deadline=future())
+        assert task.assignee_id is None
+
+
 class TestTaskPullEvents:
     def test_pull_events_clears_queue(self, task: Task):
         task.mark_complete()

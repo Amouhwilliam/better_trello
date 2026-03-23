@@ -5,6 +5,7 @@ import pytest
 
 from domain.models.project import Project
 from domain.models.task import Task
+from domain.models.user import User
 
 
 def utc_now() -> datetime:
@@ -34,3 +35,8 @@ def task_in_project(project: Project) -> Task:
     t = Task(title="Linked Task", deadline=future(7))
     t.assign_to_project(project.id, project.deadline)
     return t
+
+
+@pytest.fixture
+def user() -> User:
+    return User(fullname="Alice Dupont", email="alice@example.com", password_hash="hashed")

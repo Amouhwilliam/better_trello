@@ -26,6 +26,7 @@ class TaskResponse(BaseModel):
     deadline: datetime
     completed: bool
     project_id: Optional[UUID]
+    assignee_id: Optional[UUID]
     created_at: datetime
     updated_at: datetime
 
@@ -38,6 +39,7 @@ class TaskResponse(BaseModel):
             deadline=task.deadline,
             completed=task.completed,
             project_id=task.project_id,
+            assignee_id=task.assignee_id,
             created_at=task.created_at,
             updated_at=task.updated_at,
         )

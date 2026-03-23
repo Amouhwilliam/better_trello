@@ -24,6 +24,7 @@ class SQLiteProjectRepository(ProjectRepository):
             title=row.title,
             deadline=row.deadline.replace(tzinfo=timezone.utc),
             completed=row.completed,
+            owner_id=UUID(row.owner_id) if row.owner_id else None,
             created_at=row.created_at.replace(tzinfo=timezone.utc),
             updated_at=row.updated_at.replace(tzinfo=timezone.utc),
         )
@@ -35,6 +36,7 @@ class SQLiteProjectRepository(ProjectRepository):
             title=project.title,
             deadline=project.deadline.replace(tzinfo=None),
             completed=project.completed,
+            owner_id=str(project.owner_id) if project.owner_id else None,
             created_at=project.created_at.replace(tzinfo=None),
             updated_at=project.updated_at.replace(tzinfo=None),
         )
@@ -52,6 +54,7 @@ class SQLiteProjectRepository(ProjectRepository):
             row.title = project.title
             row.deadline = project.deadline.replace(tzinfo=None)
             row.completed = project.completed
+            row.owner_id = str(project.owner_id) if project.owner_id else None
             row.updated_at = project.updated_at.replace(tzinfo=None)
         self._db.commit()
         self._db.refresh(row)

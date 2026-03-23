@@ -4,6 +4,7 @@ from uuid import UUID
 
 from domain.models.project import Project
 from domain.models.task import Task
+from domain.models.user import User
 
 # These are PORTS — abstract contracts that define what persistence operations
 # the application needs, with no knowledge of how they are fulfilled.
@@ -48,3 +49,20 @@ class ProjectRepository(ABC):
 
     @abstractmethod
     def delete(self, project_id: UUID) -> None: ...
+
+
+class UserRepository(ABC):
+    @abstractmethod
+    def save(self, user: User) -> User: ...
+
+    @abstractmethod
+    def find_by_id(self, user_id: UUID) -> Optional[User]: ...
+
+    @abstractmethod
+    def find_by_email(self, email: str) -> Optional[User]: ...
+
+    @abstractmethod
+    def find_all(self) -> List[User]: ...
+
+    @abstractmethod
+    def delete(self, user_id: UUID) -> None: ...

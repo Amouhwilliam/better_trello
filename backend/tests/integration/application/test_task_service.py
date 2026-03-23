@@ -4,7 +4,8 @@ import pytest
 
 from application.project_service import ProjectService
 from application.task_service import TaskService
-from domain.exceptions import DeadlineConstraintError, ProjectNotFoundError, TaskNotFoundError
+from application.user_service import UserService
+from domain.exceptions import DeadlineConstraintError, ProjectNotFoundError, TaskNotFoundError, UserNotFoundError
 from domain.models.project import Project
 from domain.models.task import Task
 from tests.conftest import future, past
@@ -139,11 +140,14 @@ class TestCompleteTask:
         from infrastructure.db.project_repository import SQLiteProjectRepository
         from infrastructure.db.task_repository import SQLiteTaskRepository
 
+        from infrastructure.db.user_repository import SQLiteUserRepository
+
         cfg = Config()
         cfg.AUTO_COMPLETE_PROJECT = True
         svc = TaskService(
             task_repo=SQLiteTaskRepository(db_session),
             project_repo=SQLiteProjectRepository(db_session),
+            user_repo=SQLiteUserRepository(db_session),
             notifications=notifications,
             config=cfg,
         )
@@ -171,11 +175,14 @@ class TestCompleteTask:
         from infrastructure.db.project_repository import SQLiteProjectRepository
         from infrastructure.db.task_repository import SQLiteTaskRepository
 
+        from infrastructure.db.user_repository import SQLiteUserRepository
+
         cfg = Config()
         cfg.AUTO_COMPLETE_PROJECT = True
         svc = TaskService(
             task_repo=SQLiteTaskRepository(db_session),
             project_repo=SQLiteProjectRepository(db_session),
+            user_repo=SQLiteUserRepository(db_session),
             notifications=notifications,
             config=cfg,
         )
@@ -242,3 +249,54 @@ class TestLinkAndUnlink:
         task_service.link_task_to_project(t.id, project.id)
         unlinked = task_service.unlink_task_from_project(t.id, project.id)
         assert unlinked.project_id is None
+
+
+class TestAssignTask:
+    def test_assign_task_to_user(self, task_service: TaskService, user_service: UserService):
+        user = user_service.create_user("Alice", "alice@example.com", "pw")
+        t = task_service.create_task(title="T", deadline=future())
+        assigned = task_service.assign_task_to_user(t.id, user.id)
+        assert assigned.assignee_id == user.id
+
+    def test_assign_persists(self, task_service: TaskService, user_service: UserService):
+        user = user_service.create_user("Alice", "alice@example.com", "pw")
+        t = task_service.create_task(title="T", deadline=future())
+        task_service.assign_task_to_user(t.id, user.id)
+        assert task_service.get_task(t.id).assignee_id == user.id
+
+    def test_assign_raises_for_missing_user(self, task_service: TaskService):
+        t = task_service.create_task(title="T", deadline=future())
+        with pytest.raises(UserNotFoundError):
+            task_service.assign_task_to_user(t.id, uuid4())
+
+    def test_assign_raises_for_missing_task(self, task_service: TaskService, user_service: UserService):
+        user = user_service.create_user("Alice", "alice@example.com", "pw")
+        with pytest.raises(TaskNotFoundError):
+            task_service.assign_task_to_user(uuid4(), user.id)
+
+    def test_reassign_to_different_user(self, task_service: TaskService, user_service: UserService):
+        u1 = user_service.create_user("Alice", "alice@example.com", "pw")
+        u2 = user_service.create_user("Bob", "bob@example.com", "pw")
+        t = task_service.create_task(title="T", deadline=future())
+        task_service.assign_task_to_user(t.id, u1.id)
+        reassigned = task_service.assign_task_to_user(t.id, u2.id)
+        assert reassigned.assignee_id == u2.id
+
+    def test_unassign_task(self, task_service: TaskService, user_service: UserService):
+        user = user_service.create_user("Alice", "alice@example.com", "pw")
+        t = task_service.create_task(title="T", deadline=future())
+        task_service.assign_task_to_user(t.id, user.id)
+        unassigned = task_service.unassign_task(t.id)
+        assert unassigned.assignee_id is None
+
+    def test_unassign_persists(self, task_service: TaskService, user_service: UserService):
+        user = user_service.create_user("Alice", "alice@example.com", "pw")
+        t = task_service.create_task(title="T", deadline=future())
+        task_service.assign_task_to_user(t.id, user.id)
+        task_service.unassign_task(t.id)
+        assert task_service.get_task(t.id).assignee_id is None
+
+    def test_unassign_idempotent(self, task_service: TaskService):
+        t = task_service.create_task(title="T", deadline=future())
+        result = task_service.unassign_task(t.id)  # already unassigned — must not raise
+        assert result.assignee_id is None

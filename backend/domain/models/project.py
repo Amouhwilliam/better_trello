@@ -15,6 +15,7 @@ class Project:
     title: str
     deadline: datetime
     id: UUID = field(default_factory=uuid4)
+    owner_id: Optional[UUID] = None
     completed: bool = False
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -37,6 +38,7 @@ class Project:
                 self._pending_events.append(
                     ProjectDeadlineUpdated(
                         project_id=self.id,
+                        project_title=self.title,
                         old_deadline=old_deadline,
                         new_deadline=new_deadline,
                         affected_task_ids=affected_task_ids,
@@ -51,7 +53,7 @@ class Project:
         if not self.completed:
             self.completed = True
             self.updated_at = datetime.now(timezone.utc)
-            self._pending_events.append(ProjectCompleted(project_id=self.id))
+            self._pending_events.append(ProjectCompleted(project_id=self.id, project_title=self.title))
 
     def reopen(self) -> None:
         if self.completed:

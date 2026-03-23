@@ -96,3 +96,26 @@ def complete_task(task_id: UUID, service: TaskService = Depends(get_task_service
 )
 def reopen_task(task_id: UUID, service: TaskService = Depends(get_task_service)):
     return TaskResponse.from_domain(service.reopen_task(task_id))
+
+
+@router.patch(
+    "/{task_id}/assign/{user_id}",
+    response_model=TaskResponse,
+    summary="Assign a user to a task",
+    description="Sets the task's assignee. A task can have at most one assignee at a time.",
+)
+def assign_task(
+    task_id: UUID,
+    user_id: UUID,
+    service: TaskService = Depends(get_task_service),
+):
+    return TaskResponse.from_domain(service.assign_task_to_user(task_id, user_id))
+
+
+@router.patch(
+    "/{task_id}/unassign",
+    response_model=TaskResponse,
+    summary="Remove the assignee from a task",
+)
+def unassign_task(task_id: UUID, service: TaskService = Depends(get_task_service)):
+    return TaskResponse.from_domain(service.unassign_task(task_id))

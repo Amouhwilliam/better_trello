@@ -41,11 +41,15 @@ class NotificationService:
             return
         time_left = task.deadline - datetime.now(timezone.utc)
         if timedelta(0) < time_left <= timedelta(hours=24):
+            hours_left = int(time_left.total_seconds() // 3600)
+            minutes_left = int((time_left.total_seconds() % 3600) // 60)
             logger.warning(
-                "Task '%s' (id=%s) deadline is approaching in less than 24 hours (%s).",
+                "Deadline approaching — task '%s' (id=%s) is due in %dh %02dm (deadline: %s).",
                 task.title,
                 task.id,
-                task.deadline.isoformat(),
+                hours_left,
+                minutes_left,
+                task.deadline.strftime("%Y-%m-%d %H:%M UTC"),
             )
 
     # ------------------------------------------------------------------
@@ -53,23 +57,29 @@ class NotificationService:
     # ------------------------------------------------------------------
 
     def _on_task_completed(self, event: TaskCompleted) -> None:
-        logger.info("Task completed (id=%s).", event.task_id)
+        logger.info("Task completed — '%s' (id=%s).", event.task_title, event.task_id)
 
     def _on_task_reopened(self, event: TaskReopened) -> None:
-        logger.info(
-            "Task reopened (id=%s, project_id=%s).",
-            event.task_id,
-            event.project_id,
-        )
+        if event.project_id:
+            logger.info(
+                "Task reopened — '%s' (id=%s) in project (id=%s).",
+                event.task_title,
+                event.task_id,
+                event.project_id,
+            )
+        else:
+            logger.info("Task reopened — '%s' (id=%s).", event.task_title, event.task_id)
 
     def _on_project_deadline_updated(self, event: ProjectDeadlineUpdated) -> None:
         logger.warning(
-            "Project deadline moved earlier (project_id=%s). "
-            "Affected task ids: %s. New deadline: %s.",
+            "Project deadline moved earlier — '%s' (id=%s): %s → %s. "
+            "%d task(s) had their deadline clamped.",
+            event.project_title,
             event.project_id,
-            [str(tid) for tid in event.affected_task_ids],
-            event.new_deadline.isoformat(),
+            event.old_deadline.strftime("%Y-%m-%d"),
+            event.new_deadline.strftime("%Y-%m-%d"),
+            len(event.affected_task_ids),
         )
 
     def _on_project_completed(self, event: ProjectCompleted) -> None:
-        logger.info("Project completed (id=%s).", event.project_id)
+        logger.info("Project completed — '%s' (id=%s).", event.project_title, event.project_id)

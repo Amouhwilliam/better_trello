@@ -37,7 +37,9 @@ def get_project(project_id: UUID, service: ProjectService = Depends(get_project_
     summary="Create a project",
 )
 def create_project(body: ProjectCreate, service: ProjectService = Depends(get_project_service)):
-    return ProjectResponse.from_domain(service.create_project(title=body.title, deadline=body.deadline))
+    return ProjectResponse.from_domain(
+        service.create_project(title=body.title, deadline=body.deadline, owner_id=body.owner_id)
+    )
 
 
 @router.put(

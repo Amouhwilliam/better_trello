@@ -4,9 +4,9 @@ from uuid import UUID
 
 from config import Config
 from domain.events import TaskReopened
-from domain.exceptions import ProjectNotFoundError, TaskNotFoundError
+from domain.exceptions import ProjectNotFoundError, TaskNotFoundError, UserNotFoundError
 from domain.models.task import Task
-from domain.ports.repositories import ProjectRepository, TaskRepository
+from domain.ports.repositories import ProjectRepository, TaskRepository, UserRepository
 from infrastructure.notifications.notification_service import NotificationService
 
 
@@ -15,11 +15,13 @@ class TaskService:
         self,
         task_repo: TaskRepository,
         project_repo: ProjectRepository,
+        user_repo: UserRepository,
         notifications: NotificationService,
         config: Config,
     ) -> None:
         self._task_repo = task_repo
         self._project_repo = project_repo
+        self._user_repo = user_repo
         self._notifications = notifications
         self._config = config
 
@@ -128,6 +130,19 @@ class TaskService:
         task = self.get_task(task_id)
         # domain model allows unlinking regardless — just clear the association
         task.unlink_from_project()
+        return self._task_repo.save(task)
+
+    def assign_task_to_user(self, task_id: UUID, user_id: UUID) -> Task:
+        task = self.get_task(task_id)
+        user = self._user_repo.find_by_id(user_id)
+        if user is None:
+            raise UserNotFoundError(f"User {user_id} not found")
+        task.assign_to_user(user.id)
+        return self._task_repo.save(task)
+
+    def unassign_task(self, task_id: UUID) -> Task:
+        task = self.get_task(task_id)
+        task.unassign()
         return self._task_repo.save(task)
 
     # ------------------------------------------------------------------

@@ -42,8 +42,8 @@ class ProjectService:
     # Commands
     # ------------------------------------------------------------------
 
-    def create_project(self, title: str, deadline: datetime) -> Project:
-        project = Project(title=title, deadline=deadline)
+    def create_project(self, title: str, deadline: datetime, owner_id: Optional[UUID] = None) -> Project:
+        project = Project(title=title, deadline=deadline, owner_id=owner_id)
         return self._project_repo.save(project)
 
     def update_project(

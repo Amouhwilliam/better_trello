@@ -24,70 +24,74 @@ class TestDispatchTaskCompleted:
     def test_logs_info(self, svc: NotificationService, caplog):
         task_id = uuid4()
         with caplog.at_level(logging.INFO, logger="notifications"):
-            svc.dispatch(TaskCompleted(task_id=task_id))
+            svc.dispatch(TaskCompleted(task_id=task_id, task_title="Fix bug"))
         assert str(task_id) in caplog.text
+        assert "Fix bug" in caplog.text
         assert caplog.records[0].levelname == "INFO"
 
 
 class TestDispatchTaskReopened:
-    def test_logs_info(self, svc: NotificationService, caplog):
+    def test_logs_info_with_project(self, svc: NotificationService, caplog):
         task_id = uuid4()
         project_id = uuid4()
         with caplog.at_level(logging.INFO, logger="notifications"):
-            svc.dispatch(TaskReopened(task_id=task_id, project_id=project_id))
+            svc.dispatch(TaskReopened(task_id=task_id, task_title="Fix bug", project_id=project_id))
         assert str(task_id) in caplog.text
+        assert str(project_id) in caplog.text
+        assert "Fix bug" in caplog.text
         assert caplog.records[0].levelname == "INFO"
 
     def test_logs_info_without_project(self, svc: NotificationService, caplog):
         with caplog.at_level(logging.INFO, logger="notifications"):
-            svc.dispatch(TaskReopened(task_id=uuid4(), project_id=None))
+            svc.dispatch(TaskReopened(task_id=uuid4(), task_title="Fix bug", project_id=None))
+        assert "Fix bug" in caplog.text
         assert caplog.records[0].levelname == "INFO"
 
 
 class TestDispatchProjectDeadlineUpdated:
-    def test_logs_warning(self, svc: NotificationService, caplog):
+    def test_logs_warning_with_title_and_dates(self, svc: NotificationService, caplog):
         project_id = uuid4()
-        affected_id = uuid4()
         event = ProjectDeadlineUpdated(
             project_id=project_id,
+            project_title="Q2 Launch",
             old_deadline=future(10),
             new_deadline=future(5),
-            affected_task_ids=[affected_id],
+            affected_task_ids=[uuid4()],
         )
         with caplog.at_level(logging.WARNING, logger="notifications"):
             svc.dispatch(event)
         assert str(project_id) in caplog.text
-        assert str(affected_id) in caplog.text
+        assert "Q2 Launch" in caplog.text
         assert caplog.records[0].levelname == "WARNING"
 
-    def test_logs_warning_with_multiple_affected_tasks(self, svc: NotificationService, caplog):
-        ids = [uuid4(), uuid4(), uuid4()]
+    def test_logs_number_of_affected_tasks(self, svc: NotificationService, caplog):
         event = ProjectDeadlineUpdated(
             project_id=uuid4(),
+            project_title="P",
             old_deadline=future(20),
             new_deadline=future(5),
-            affected_task_ids=ids,
+            affected_task_ids=[uuid4(), uuid4(), uuid4()],
         )
         with caplog.at_level(logging.WARNING, logger="notifications"):
             svc.dispatch(event)
-        for tid in ids:
-            assert str(tid) in caplog.text
+        assert "3" in caplog.text
 
 
 class TestDispatchProjectCompleted:
-    def test_logs_info(self, svc: NotificationService, caplog):
+    def test_logs_info_with_title(self, svc: NotificationService, caplog):
         project_id = uuid4()
         with caplog.at_level(logging.INFO, logger="notifications"):
-            svc.dispatch(ProjectCompleted(project_id=project_id))
+            svc.dispatch(ProjectCompleted(project_id=project_id, project_title="Q2 Launch"))
         assert str(project_id) in caplog.text
+        assert "Q2 Launch" in caplog.text
         assert caplog.records[0].levelname == "INFO"
 
 
 class TestDispatchAll:
     def test_dispatches_each_event(self, svc: NotificationService, caplog):
         events = [
-            TaskCompleted(task_id=uuid4()),
-            ProjectCompleted(project_id=uuid4()),
+            TaskCompleted(task_id=uuid4(), task_title="T1"),
+            ProjectCompleted(project_id=uuid4(), project_title="P1"),
         ]
         with caplog.at_level(logging.INFO, logger="notifications"):
             svc.dispatch_all(events)
@@ -107,6 +111,12 @@ class TestCheckDeadlineApproaching:
         assert len(caplog.records) == 1
         assert caplog.records[0].levelname == "WARNING"
         assert "Urgent" in caplog.text
+
+    def test_warns_includes_time_remaining(self, svc: NotificationService, caplog):
+        task = Task(title="T", deadline=utc_now() + timedelta(hours=5, minutes=30))
+        with caplog.at_level(logging.WARNING, logger="notifications"):
+            svc.check_deadline_approaching(task)
+        assert "5h" in caplog.text
 
     def test_warns_exactly_at_24h_boundary(self, svc: NotificationService, caplog):
         task = Task(title="T", deadline=utc_now() + timedelta(hours=23, minutes=59))
