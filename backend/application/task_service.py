@@ -54,10 +54,28 @@ class TaskService:
         title: str,
         deadline: datetime,
         description: Optional[str] = None,
+        project_id: Optional[UUID] = None,
     ) -> Task:
         task = Task(title=title, deadline=deadline, description=description)
+        if project_id is not None:
+            project = self._project_repo.find_by_id(project_id)
+            if project is None:
+                raise ProjectNotFoundError(f"Project {project_id} not found")
+            task.assign_to_project(project_id, project.deadline)
         saved = self._task_repo.save(task)
         self._notifications.check_deadline_approaching(saved)
+        return saved
+
+    def update_task_status(self, task_id: UUID, status: str) -> Task:
+        task = self.get_task(task_id)
+        if status == "completed":
+            task.mark_complete()
+        elif status == "todo":
+            task.reopen()
+        elif status == "in_progress":
+            task.set_in_progress()
+        saved = self._task_repo.save(task)
+        self._notifications.dispatch_all(task.pull_events())
         return saved
 
     def update_task(

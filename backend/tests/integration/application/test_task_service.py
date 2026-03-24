@@ -300,3 +300,36 @@ class TestAssignTask:
         t = task_service.create_task(title="T", deadline=future())
         result = task_service.unassign_task(t.id)  # already unassigned — must not raise
         assert result.assignee_id is None
+
+
+class TestUpdateTaskStatus:
+    def test_update_status_to_in_progress(self, task_service: TaskService):
+        t = task_service.create_task(title="T", deadline=future())
+        updated = task_service.update_task_status(t.id, "in_progress")
+        assert updated.status == "in_progress"
+        assert updated.completed is False
+
+    def test_update_status_to_completed(self, task_service: TaskService):
+        t = task_service.create_task(title="T", deadline=future())
+        updated = task_service.update_task_status(t.id, "completed")
+        assert updated.status == "completed"
+        assert updated.completed is True
+
+    def test_update_status_to_todo_reopens(self, task_service: TaskService):
+        t = task_service.create_task(title="T", deadline=future())
+        task_service.update_task_status(t.id, "completed")
+        reopened = task_service.update_task_status(t.id, "todo")
+        assert reopened.status == "todo"
+        assert reopened.completed is False
+
+
+class TestCreateTaskWithProjectId:
+    def test_create_task_links_to_project(self, task_service: TaskService, project_service: ProjectService):
+        project = project_service.create_project(title="P", deadline=future(30))
+        t = task_service.create_task(title="T", deadline=future(5), project_id=project.id)
+        assert t.project_id == project.id
+
+    def test_create_task_with_unknown_project_raises(self, task_service: TaskService):
+        from domain.exceptions import ProjectNotFoundError
+        with pytest.raises(ProjectNotFoundError):
+            task_service.create_task(title="T", deadline=future(), project_id=uuid4())

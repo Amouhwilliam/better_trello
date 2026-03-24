@@ -14,6 +14,7 @@ class Task:
     id: UUID = field(default_factory=uuid4)
     description: Optional[str] = None
     completed: bool = False
+    status: str = "todo"
     project_id: Optional[UUID] = None
     assignee_id: Optional[UUID] = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -63,14 +64,21 @@ class Task:
     def mark_complete(self) -> None:
         if not self.completed:
             self.completed = True
+            self.status = "completed"
             self.updated_at = datetime.now(timezone.utc)
             self._pending_events.append(TaskCompleted(task_id=self.id, task_title=self.title))
 
     def reopen(self) -> None:
         if self.completed:
             self.completed = False
+            self.status = "todo"
             self.updated_at = datetime.now(timezone.utc)
             self._pending_events.append(TaskReopened(task_id=self.id, task_title=self.title, project_id=self.project_id))
+
+    def set_in_progress(self) -> None:
+        if not self.completed:
+            self.status = "in_progress"
+            self.updated_at = datetime.now(timezone.utc)
 
     def adjust_deadline(self, new_deadline: datetime) -> None:
         """Force-adjust deadline (used when project deadline is moved earlier)."""

@@ -11,6 +11,7 @@ class TaskCreate(BaseModel):
     title: str = Field(..., min_length=1, examples=["Implement login page"])
     deadline: datetime = Field(..., examples=["2026-04-01T12:00:00Z"])
     description: Optional[str] = Field(None, examples=["Use OAuth2 with Google"])
+    project_id: Optional[UUID] = None
 
 
 class TaskUpdate(BaseModel):
@@ -25,6 +26,7 @@ class TaskResponse(BaseModel):
     description: Optional[str]
     deadline: datetime
     completed: bool
+    status: str
     project_id: Optional[UUID]
     assignee_id: Optional[UUID]
     created_at: datetime
@@ -38,6 +40,7 @@ class TaskResponse(BaseModel):
             description=task.description,
             deadline=task.deadline,
             completed=task.completed,
+            status=task.status,
             project_id=task.project_id,
             assignee_id=task.assignee_id,
             created_at=task.created_at,

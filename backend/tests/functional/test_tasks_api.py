@@ -317,3 +317,42 @@ class TestAssignTask:
     def test_task_response_has_assignee_id_field(self, client: TestClient):
         t = create_task(client, title="Field check")
         assert "assignee_id" in t
+
+    def test_task_response_has_status_field(self, client: TestClient):
+        t = create_task(client, title="Status field check")
+        assert "status" in t
+        assert t["status"] == "todo"
+
+
+class TestUpdateTaskStatus:
+    def test_update_task_status_to_in_progress(self, client: TestClient):
+        t = create_task(client, title="In Progress Task")
+        r = client.patch(f"/tasks/{t['id']}/status", json={"status": "in_progress"})
+        assert r.status_code == 200
+        assert r.json()["status"] == "in_progress"
+        assert r.json()["completed"] is False
+
+    def test_update_task_status_to_completed(self, client: TestClient):
+        t = create_task(client, title="Complete Task")
+        r = client.patch(f"/tasks/{t['id']}/status", json={"status": "completed"})
+        assert r.status_code == 200
+        assert r.json()["status"] == "completed"
+        assert r.json()["completed"] is True
+
+    def test_update_task_status_to_todo_reopens(self, client: TestClient):
+        t = create_task(client, title="Reopen Task")
+        client.patch(f"/tasks/{t['id']}/status", json={"status": "completed"})
+        r = client.patch(f"/tasks/{t['id']}/status", json={"status": "todo"})
+        assert r.status_code == 200
+        assert r.json()["status"] == "todo"
+        assert r.json()["completed"] is False
+
+    def test_update_task_status_returns_404_for_unknown(self, client: TestClient):
+        from uuid import uuid4
+        r = client.patch(f"/tasks/{uuid4()}/status", json={"status": "in_progress"})
+        assert r.status_code == 404
+
+    def test_update_task_status_missing_body_returns_422(self, client: TestClient):
+        t = create_task(client, title="No body")
+        r = client.patch(f"/tasks/{t['id']}/status", json={})
+        assert r.status_code == 422

@@ -47,6 +47,7 @@ class TaskORM(Base):
     description = Column(String, nullable=True)
     deadline = Column(DateTime, nullable=False)
     completed = Column(Boolean, default=False, nullable=False)
+    status = Column(String, default="todo", nullable=False)
     project_id = Column(String(36), ForeignKey("projects.id"), nullable=True)
     assignee_id = Column(String(36), ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, nullable=False)

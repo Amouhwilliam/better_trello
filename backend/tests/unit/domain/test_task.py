@@ -15,6 +15,7 @@ class TestTaskCreation:
         assert task.title == "My Task"
         assert task.description is None
         assert task.completed is False
+        assert task.status == "todo"
         assert task.project_id is None
         assert task.id is not None
         assert task.created_at.tzinfo == timezone.utc
@@ -95,6 +96,7 @@ class TestTaskCompletion:
     def test_mark_complete_sets_flag(self, task: Task):
         task.mark_complete()
         assert task.completed is True
+        assert task.status == "completed"
 
     def test_mark_complete_emits_event(self, task: Task):
         task.mark_complete()
@@ -121,6 +123,7 @@ class TestTaskReopen:
         task.pull_events()
         task.reopen()
         assert task.completed is False
+        assert task.status == "todo"
 
     def test_reopen_emits_event(self, task_in_project: Task):
         task_in_project.mark_complete()
@@ -211,6 +214,37 @@ class TestTaskAssignment:
     def test_assign_defaults_to_none(self):
         task = Task(title="T", deadline=future())
         assert task.assignee_id is None
+
+
+class TestTaskStatus:
+    def test_new_task_has_todo_status(self):
+        task = Task(title="T", deadline=future())
+        assert task.status == "todo"
+
+    def test_set_in_progress(self, task: Task):
+        task.set_in_progress()
+        assert task.status == "in_progress"
+
+    def test_set_in_progress_does_not_affect_completed_flag(self, task: Task):
+        task.set_in_progress()
+        assert task.completed is False
+
+    def test_mark_complete_sets_status_completed(self, task: Task):
+        task.mark_complete()
+        assert task.status == "completed"
+
+    def test_reopen_resets_status_to_todo(self, task: Task):
+        task.mark_complete()
+        task.pull_events()
+        task.reopen()
+        assert task.status == "todo"
+
+    def test_set_in_progress_ignored_when_completed(self, task: Task):
+        task.mark_complete()
+        task.pull_events()
+        task.set_in_progress()
+        assert task.status == "completed"
+        assert task.completed is True
 
 
 class TestTaskPullEvents:

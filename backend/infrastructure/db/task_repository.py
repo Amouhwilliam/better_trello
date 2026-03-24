@@ -25,6 +25,7 @@ class SQLiteTaskRepository(TaskRepository):
             description=row.description,
             deadline=row.deadline.replace(tzinfo=timezone.utc),
             completed=row.completed,
+            status=row.status,
             project_id=UUID(row.project_id) if row.project_id else None,
             assignee_id=UUID(row.assignee_id) if row.assignee_id else None,
             created_at=row.created_at.replace(tzinfo=timezone.utc),
@@ -40,6 +41,7 @@ class SQLiteTaskRepository(TaskRepository):
             # strip tzinfo — SQLite stores naive UTC datetimes
             deadline=task.deadline.replace(tzinfo=None),
             completed=task.completed,
+            status=task.status,
             project_id=str(task.project_id) if task.project_id else None,
             assignee_id=str(task.assignee_id) if task.assignee_id else None,
             created_at=task.created_at.replace(tzinfo=None),
@@ -60,6 +62,7 @@ class SQLiteTaskRepository(TaskRepository):
             row.description = task.description
             row.deadline = task.deadline.replace(tzinfo=None)
             row.completed = task.completed
+            row.status = task.status
             row.project_id = str(task.project_id) if task.project_id else None
             row.assignee_id = str(task.assignee_id) if task.assignee_id else None
             row.updated_at = task.updated_at.replace(tzinfo=None)

@@ -32,6 +32,7 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
+      - API_URL=http://api:8000
       - NEXT_PUBLIC_API_URL=http://localhost:8000
       - WATCHPACK_POLLING=true
       - CHOKIDAR_USEPOLLING=true

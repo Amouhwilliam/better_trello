@@ -2,6 +2,7 @@ from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
+from pydantic import BaseModel
 
 from api.dependencies import get_task_service
 from api.schemas.task import TaskCreate, TaskResponse, TaskUpdate
@@ -46,6 +47,7 @@ def create_task(body: TaskCreate, service: TaskService = Depends(get_task_servic
         title=body.title,
         deadline=body.deadline,
         description=body.description,
+        project_id=body.project_id,
     )
     return TaskResponse.from_domain(task)
 
@@ -96,6 +98,15 @@ def complete_task(task_id: UUID, service: TaskService = Depends(get_task_service
 )
 def reopen_task(task_id: UUID, service: TaskService = Depends(get_task_service)):
     return TaskResponse.from_domain(service.reopen_task(task_id))
+
+
+class TaskStatusUpdate(BaseModel):
+    status: str  # "todo" | "in_progress" | "completed"
+
+
+@router.patch("/{task_id}/status", response_model=TaskResponse, summary="Update task status")
+def update_task_status(task_id: UUID, body: TaskStatusUpdate, service: TaskService = Depends(get_task_service)):
+    return TaskResponse.from_domain(service.update_task_status(task_id, body.status))
 
 
 @router.patch(
