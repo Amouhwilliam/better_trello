@@ -6,8 +6,8 @@ from domain.events import ProjectDeadlineUpdated
 from domain.exceptions import ProjectNotFoundError
 from domain.models.project import Project
 from domain.models.task import Task
+from domain.ports.notification_port import NotificationPort
 from domain.ports.repositories import ProjectRepository, TaskRepository
-from infrastructure.notifications.notification_service import NotificationService
 
 
 class ProjectService:
@@ -15,7 +15,7 @@ class ProjectService:
         self,
         project_repo: ProjectRepository,
         task_repo: TaskRepository,
-        notifications: NotificationService,
+        notifications: NotificationPort,
     ) -> None:
         self._project_repo = project_repo
         self._task_repo = task_repo

@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
-  Plus, X, Loader2, UserPlus, Search, Calendar, AlertCircle, ChevronDown,
+  Plus, X, Loader2, UserPlus, Search, Calendar, AlertCircle, ChevronDown, Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api, type Task, type TaskStatus, type User } from "@/lib/api";
@@ -44,15 +45,20 @@ type TaskForm = z.infer<typeof taskSchema>;
 
 export function BoardClient({
   projectId,
-  projectDeadline,
+  projectTitle: initialTitle,
+  projectDeadline: initialDeadline,
 }: {
   projectId: string;
   userId: string;
+  projectTitle: string;
   projectDeadline: string;
 }) {
   const queryClient = useQueryClient();
   const [createForStatus, setCreateForStatus] = useState<TaskStatus | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editingProject, setEditingProject] = useState(false);
+  const [projectTitle, setProjectTitle] = useState(initialTitle);
+  const [projectDeadline, setProjectDeadline] = useState(initialDeadline);
 
   const { data: tasks = [], isLoading } = useQuery({
     queryKey: ["project-tasks", projectId],
@@ -109,6 +115,17 @@ export function BoardClient({
 
   return (
     <>
+      {/* Project edit button */}
+      <div className="mb-6 flex justify-end max-w-screen-xl mx-auto">
+        <button
+          onClick={() => setEditingProject(true)}
+          className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-500 shadow-sm transition-colors hover:border-indigo-300 hover:text-indigo-600"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+          Edit project
+        </button>
+      </div>
+
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="flex justify-center">
           <div className="flex gap-5">
@@ -188,7 +205,133 @@ export function BoardClient({
           onClose={() => setEditingTask(null)}
         />
       )}
+
+      {editingProject && (
+        <ProjectEditModal
+          projectId={projectId}
+          currentTitle={projectTitle}
+          currentDeadline={projectDeadline}
+          onDone={(updated) => {
+            setProjectTitle(updated.title);
+            setProjectDeadline(updated.deadline);
+            setEditingProject(false);
+          }}
+          onClose={() => setEditingProject(false)}
+        />
+      )}
     </>
+  );
+}
+
+// ─── Project edit modal ───────────────────────────────────────────────────────
+
+const projectEditSchema = z.object({
+  title: z.string().min(2, "Title must be at least 2 characters."),
+  deadline: z.string().min(1, "Deadline is required."),
+});
+type ProjectEditForm = z.infer<typeof projectEditSchema>;
+
+function ProjectEditModal({
+  projectId,
+  currentTitle,
+  currentDeadline,
+  onDone,
+  onClose,
+}: {
+  projectId: string;
+  currentTitle: string;
+  currentDeadline: string;
+  onDone: (updated: { title: string; deadline: string }) => void;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const toLocalDatetime = (iso: string) => {
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    setError,
+  } = useForm<ProjectEditForm>({
+    resolver: zodResolver(projectEditSchema),
+    defaultValues: {
+      title: currentTitle,
+      deadline: toLocalDatetime(currentDeadline),
+    },
+  });
+
+  const { mutate, isPending } = useMutation({
+    mutationFn: (v: ProjectEditForm) =>
+      api.projects.update(projectId, {
+        title: v.title,
+        deadline: new Date(v.deadline).toISOString(),
+      }),
+    onSuccess: (updated) => {
+      toast.success(`Project "${updated.title}" updated.`);
+      onDone({ title: updated.title, deadline: updated.deadline });
+      queryClient.invalidateQueries({ queryKey: ["project-tasks", projectId] });
+      router.refresh();
+    },
+    onError: (err: Error) => {
+      setError("root", { message: err.message });
+      toast.error(err.message);
+    },
+  });
+
+  const minDeadline = toLocalDatetime(new Date().toISOString());
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">Edit project</h2>
+            <p className="mt-0.5 text-xs text-slate-400">Update the project details below.</p>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 transition-colors">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit((v) => mutate(v))} className="space-y-4 px-6 py-5">
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium text-slate-700">Project title</Label>
+            <Input autoFocus placeholder="e.g. Q2 Roadmap" className="h-10" {...register("title")} />
+            {errors.title && <p className="text-xs text-red-500">{errors.title.message}</p>}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium text-slate-700">Deadline</Label>
+            <Input type="datetime-local" className="h-10" min={minDeadline} {...register("deadline")} />
+            {errors.deadline && <p className="text-xs text-red-500">{errors.deadline.message}</p>}
+          </div>
+
+          {errors.root && (
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{errors.root.message}</p>
+          )}
+
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="outline" className="flex-1 h-10" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isPending} className="flex-1 h-10 bg-indigo-600 text-white hover:bg-indigo-700">
+              {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save changes"}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 
@@ -206,7 +349,9 @@ function TaskCard({
   onClick: () => void;
 }) {
   const deadline = new Date(task.deadline);
-  const isOverdue = !task.completed && deadline < new Date();
+  const now = new Date();
+  const isOverdue = !task.completed && deadline < now;
+  const isUrgent = !task.completed && !isOverdue && deadline.getTime() - now.getTime() <= 24 * 60 * 60 * 1000;
 
   return (
     <Draggable draggableId={task.id} index={index}>
@@ -216,12 +361,20 @@ function TaskCard({
           {...provided.draggableProps}
           {...provided.dragHandleProps}
           onClick={onClick}
-          className={`rounded-xl border bg-white p-3 shadow-sm select-none cursor-pointer transition-shadow ${
+          className={`rounded-xl border bg-white p-3 shadow-sm select-none cursor-pointer transition-all ${
             snapshot.isDragging
               ? "shadow-xl border-indigo-300 rotate-1 scale-[1.02]"
+              : isUrgent
+              ? "border-red-300 shadow-[0_0_0_1px_rgba(239,68,68,0.3),0_2px_8px_rgba(239,68,68,0.15)] hover:shadow-[0_0_0_1px_rgba(239,68,68,0.5),0_4px_12px_rgba(239,68,68,0.25)]"
               : "border-slate-200 hover:shadow-md hover:border-indigo-200"
           }`}
         >
+          {isUrgent && (
+            <div className="mb-2 flex items-center gap-1.5 rounded-md bg-red-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-red-500">
+              <AlertCircle className="h-3 w-3 shrink-0" />
+              Due within 24 h
+            </div>
+          )}
           <p className="text-sm font-medium text-slate-800 leading-snug">{task.title}</p>
           {task.description && (
             <p className="mt-1 text-xs text-slate-400 line-clamp-2">{task.description}</p>

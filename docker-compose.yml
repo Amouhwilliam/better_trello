@@ -7,9 +7,8 @@ services:
     volumes:
       - ./backend:/app
       - sqlite_data:/app/data   # persists the SQLite DB file across restarts
-    environment:
-      - DATABASE_URL=sqlite:////app/data/tasks.db
-      - AUTO_COMPLETE_PROJECT=false
+    env_file:
+      - ./backend/.env
     restart: unless-stopped
 
   datasette:

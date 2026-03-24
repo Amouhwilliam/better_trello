@@ -1,5 +1,11 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+function getToken(): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(/(?:^|;\s*)bt_token=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 export interface User {
   id: string;
   fullname: string;
@@ -15,10 +21,21 @@ export interface CreateUserPayload {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getToken();
   const res = await fetch(`${API_URL}${path}`, {
-    headers: { "Content-Type": "application/json" },
     ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init?.headers ?? {}),
+    },
   });
+  if (res.status === 401) {
+    // Token expired or invalid — clear cookie and redirect to login
+    document.cookie = "bt_token=; path=/; max-age=0";
+    window.location.href = "/";
+    throw new Error("Session expired. Please sign in again.");
+  }
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: "Unknown error" }));
     throw new Error(error.detail ?? `HTTP ${res.status}`);
@@ -76,6 +93,8 @@ export const api = {
     get: (id: string) => request<Project>(`/projects/${id}`),
     create: (payload: CreateProjectPayload) =>
       request<Project>("/projects", { method: "POST", body: JSON.stringify(payload) }),
+    update: (id: string, payload: Partial<{ title: string; deadline: string }>) =>
+      request<Project>(`/projects/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
     tasks: (id: string) => request<Task[]>(`/projects/${id}/tasks`),
   },
   tasks: {

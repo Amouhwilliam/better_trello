@@ -4,9 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation } from "@tanstack/react-query";
 import { z } from "zod";
-import { Loader2, Kanban, ArrowRight } from "lucide-react";
+import { Loader2, Kanban, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -14,48 +13,47 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 const schema = z.object({
-  email: z.string().email("Please enter a valid email address."),
+  email: z.email("Please enter a valid email address."),
+  password: z.string().min(1, "Password is required."),
 });
 type FormValues = z.infer<typeof schema>;
 
-async function lookupEmail(email: string) {
-  const res = await fetch(`/api/users/lookup?email=${encodeURIComponent(email)}`);
-  if (res.status === 404) return { exists: false, user: null };
+async function loginUser(email: string, password: string) {
+  const res = await fetch("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ?? "Something went wrong. Please try again.");
+    throw new Error(body.error ?? "Invalid credentials.");
   }
-  return res.json() as Promise<{ exists: boolean; user: { id: string } }>;
+  return res.json() as Promise<{ user: { id: string; fullname: string } }>;
 }
 
 export default function HomePage() {
   const router = useRouter();
-  const [serverError, setServerError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const {
     register,
     handleSubmit,
-    getValues,
     formState: { errors },
+    setError,
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
 
-  const { mutate, isPending } = useMutation({
-    mutationFn: (email: string) => lookupEmail(email),
-    onSuccess: (data) => {
-      const email = getValues("email");
-      if (data.exists && data.user) {
-        router.push(`/dashboard?userId=${data.user.id}`);
-      } else {
-        router.push(`/register?email=${encodeURIComponent(email)}`);
-      }
-    },
-    onError: (err: Error) => setServerError(err.message),
-  });
-
-  const onSubmit = (values: FormValues) => {
-    setServerError(null);
-    mutate(values.email);
-  };
+  async function onSubmit({ email, password }: FormValues) {
+    setLoading(true);
+    try {
+      await loginUser(email, password);
+      router.push("/dashboard");
+    } catch (err: unknown) {
+      setError("root", { message: err instanceof Error ? err.message : "Something went wrong." });
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 px-4">
@@ -75,16 +73,12 @@ export default function HomePage() {
         <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/60">
           <div className="mb-6">
             <h2 className="text-lg font-semibold text-slate-900">Welcome back</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Enter your email to continue or create an account.
-            </p>
+            <p className="mt-1 text-sm text-slate-500">Sign in to your account.</p>
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-sm font-medium text-slate-700">
-                Email address
-              </Label>
+              <Label htmlFor="email" className="text-sm font-medium text-slate-700">Email address</Label>
               <Input
                 id="email"
                 type="email"
@@ -94,27 +88,42 @@ export default function HomePage() {
                 className="h-11"
                 {...register("email")}
               />
-              {errors.email && (
-                <p className="text-xs text-red-500">{errors.email.message}</p>
-              )}
-              {serverError && (
-                <p className="text-xs text-red-500">{serverError}</p>
-              )}
+              {errors.email && <p className="text-xs text-red-500">{errors.email.message}</p>}
             </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="password" className="text-sm font-medium text-slate-700">Password</Label>
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                  className="h-11 pr-10"
+                  {...register("password")}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-slate-600"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              {errors.password && <p className="text-xs text-red-500">{errors.password.message}</p>}
+            </div>
+
+            {errors.root && (
+              <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{errors.root.message}</p>
+            )}
 
             <Button
               type="submit"
-              disabled={isPending}
+              disabled={loading}
               className="h-11 w-full bg-indigo-600 text-white hover:bg-indigo-700"
             >
-              {isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <>
-                  Continue
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </>
-              )}
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign in"}
             </Button>
           </form>
         </div>

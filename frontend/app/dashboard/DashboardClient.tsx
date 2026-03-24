@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Kanban, Plus, X, Loader2, Users, FolderKanban, CheckCircle2, Clock } from "lucide-react";
+import { Kanban, Plus, X, Loader2, Users, FolderKanban, CheckCircle2, Clock, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { api, type Project, type User } from "@/lib/api";
@@ -41,6 +41,7 @@ export function DashboardClient({ userId }: { userId: string }) {
   const [tab, setTab] = useState<Tab>("projects");
   const [projectModalOpen, setProjectModalOpen] = useState(false);
   const [userModalOpen, setUserModalOpen] = useState(false);
+  const [showContributorPassword, setShowContributorPassword] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: projects = [], isLoading: loadingProjects } = useQuery({
@@ -243,7 +244,23 @@ export function DashboardClient({ userId }: { userId: string }) {
             <Separator />
             <div className="space-y-1.5">
               <Label htmlFor="u-password" className="text-sm font-medium text-slate-700">Password</Label>
-              <Input id="u-password" type="password" placeholder="••••••••" className="h-11" {...regUser("password")} />
+              <div className="relative">
+                <Input
+                  id="u-password"
+                  type={showContributorPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  className="h-11 pr-10"
+                  {...regUser("password")}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowContributorPassword((v) => !v)}
+                  className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-slate-600"
+                  tabIndex={-1}
+                >
+                  {showContributorPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
               {userErrors.password && <p className="text-xs text-red-500">{userErrors.password.message}</p>}
             </div>
             {userErrors.root && (

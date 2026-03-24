@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
 
-from api.dependencies import get_task_service
+from api.dependencies import get_current_user_id, get_task_service
 from api.schemas.task import TaskCreate, TaskResponse, TaskUpdate
 from application.task_service import TaskService
 
@@ -22,6 +22,7 @@ def list_tasks(
     overdue: Optional[bool] = None,
     project_id: Optional[UUID] = None,
     service: TaskService = Depends(get_task_service),
+    _: UUID = Depends(get_current_user_id),
 ):
     tasks = service.get_all_tasks(completed=completed, overdue=overdue, project_id=project_id)
     return [TaskResponse.from_domain(t) for t in tasks]
@@ -32,7 +33,7 @@ def list_tasks(
     response_model=TaskResponse,
     summary="Get a task by ID",
 )
-def get_task(task_id: UUID, service: TaskService = Depends(get_task_service)):
+def get_task(task_id: UUID, service: TaskService = Depends(get_task_service), _: UUID = Depends(get_current_user_id)):
     return TaskResponse.from_domain(service.get_task(task_id))
 
 
@@ -42,7 +43,7 @@ def get_task(task_id: UUID, service: TaskService = Depends(get_task_service)):
     status_code=status.HTTP_201_CREATED,
     summary="Create a task",
 )
-def create_task(body: TaskCreate, service: TaskService = Depends(get_task_service)):
+def create_task(body: TaskCreate, service: TaskService = Depends(get_task_service), _: UUID = Depends(get_current_user_id)):
     task = service.create_task(
         title=body.title,
         deadline=body.deadline,
@@ -62,6 +63,7 @@ def update_task(
     task_id: UUID,
     body: TaskUpdate,
     service: TaskService = Depends(get_task_service),
+    _: UUID = Depends(get_current_user_id),
 ):
     task = service.update_task(
         task_id=task_id,
@@ -77,7 +79,7 @@ def update_task(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a task",
 )
-def delete_task(task_id: UUID, service: TaskService = Depends(get_task_service)):
+def delete_task(task_id: UUID, service: TaskService = Depends(get_task_service), _: UUID = Depends(get_current_user_id)):
     service.delete_task(task_id)
 
 
@@ -86,7 +88,7 @@ def delete_task(task_id: UUID, service: TaskService = Depends(get_task_service))
     response_model=TaskResponse,
     summary="Mark a task as completed",
 )
-def complete_task(task_id: UUID, service: TaskService = Depends(get_task_service)):
+def complete_task(task_id: UUID, service: TaskService = Depends(get_task_service), _: UUID = Depends(get_current_user_id)):
     return TaskResponse.from_domain(service.complete_task(task_id))
 
 
@@ -96,7 +98,7 @@ def complete_task(task_id: UUID, service: TaskService = Depends(get_task_service
     summary="Reopen a completed task",
     description="Sets the task back to incomplete. If the parent project was completed, it will also be set back to open.",
 )
-def reopen_task(task_id: UUID, service: TaskService = Depends(get_task_service)):
+def reopen_task(task_id: UUID, service: TaskService = Depends(get_task_service), _: UUID = Depends(get_current_user_id)):
     return TaskResponse.from_domain(service.reopen_task(task_id))
 
 
@@ -105,7 +107,7 @@ class TaskStatusUpdate(BaseModel):
 
 
 @router.patch("/{task_id}/status", response_model=TaskResponse, summary="Update task status")
-def update_task_status(task_id: UUID, body: TaskStatusUpdate, service: TaskService = Depends(get_task_service)):
+def update_task_status(task_id: UUID, body: TaskStatusUpdate, service: TaskService = Depends(get_task_service), _: UUID = Depends(get_current_user_id)):
     return TaskResponse.from_domain(service.update_task_status(task_id, body.status))
 
 
@@ -119,6 +121,7 @@ def assign_task(
     task_id: UUID,
     user_id: UUID,
     service: TaskService = Depends(get_task_service),
+    _: UUID = Depends(get_current_user_id),
 ):
     return TaskResponse.from_domain(service.assign_task_to_user(task_id, user_id))
 
@@ -128,5 +131,5 @@ def assign_task(
     response_model=TaskResponse,
     summary="Remove the assignee from a task",
 )
-def unassign_task(task_id: UUID, service: TaskService = Depends(get_task_service)):
+def unassign_task(task_id: UUID, service: TaskService = Depends(get_task_service), _: UUID = Depends(get_current_user_id)):
     return TaskResponse.from_domain(service.unassign_task(task_id))

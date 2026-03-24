@@ -1,12 +1,16 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Kanban, Clock } from "lucide-react";
+import { cookies } from "next/headers";
 import { BoardClient } from "./BoardClient";
 
 const API_URL = process.env.API_URL ?? "http://api:8000";
 
-async function getProject(id: string) {
-  const res = await fetch(`${API_URL}/projects/${id}`, { cache: "no-store" });
+async function getProject(id: string, token?: string) {
+  const res = await fetch(`${API_URL}/projects/${id}`, {
+    cache: "no-store",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error("Failed to fetch project");
   return res.json() as Promise<{
@@ -28,7 +32,8 @@ export default async function ProjectBoardPage({
   const { id } = await params;
   const { userId = "" } = await searchParams;
 
-  const project = await getProject(id);
+  const token = (await cookies()).get("bt_token")?.value;
+  const project = await getProject(id, token);
   if (!project) notFound();
 
   const deadline = new Date(project.deadline);
@@ -39,7 +44,7 @@ export default async function ProjectBoardPage({
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex h-14 max-w-screen-xl items-center gap-4 px-6">
           <Link
-            href={userId ? `/dashboard?userId=${userId}` : "/dashboard"}
+            href="/dashboard"
             className="flex items-center gap-1.5 text-xs text-slate-400 transition-colors hover:text-slate-600"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
@@ -64,7 +69,12 @@ export default async function ProjectBoardPage({
 
       {/* Board */}
       <main className="flex-1 overflow-x-auto p-8">
-        <BoardClient projectId={id} userId={userId} projectDeadline={project.deadline} />
+        <BoardClient
+          projectId={id}
+          userId={userId}
+          projectTitle={project.title}
+          projectDeadline={project.deadline}
+        />
       </main>
     </div>
   );

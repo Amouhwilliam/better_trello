@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 
 const API_URL = process.env.API_URL ?? "http://api:8000";
 
@@ -6,9 +7,15 @@ export async function GET(req: NextRequest) {
   const email = req.nextUrl.searchParams.get("email");
   if (!email) return NextResponse.json({ error: "email required" }, { status: 400 });
 
+  const token = (await cookies()).get("bt_token")?.value;
+
   let res: Response;
   try {
-    res = await fetch(`${API_URL}/users`);
+    res = await fetch(`${API_URL}/users`, {
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
   } catch {
     return NextResponse.json({ error: "Service unavailable. Please try again later." }, { status: 503 });
   }

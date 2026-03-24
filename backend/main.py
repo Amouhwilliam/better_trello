@@ -12,7 +12,8 @@ from api.exception_handlers import (
     user_already_exists_handler,
     user_not_found_handler,
 )
-from api.routers import projects, tasks, users
+from api.routers import auth, projects, tasks, users
+from application.user_service import UserService
 from domain.exceptions import (
     DeadlineConstraintError,
     ProjectCompletionError,
@@ -21,16 +22,46 @@ from domain.exceptions import (
     UserAlreadyExistsError,
     UserNotFoundError,
 )
-from infrastructure.db.database import init_db
+from infrastructure.db.database import SessionLocal, init_db
+from infrastructure.db.user_repository import SQLiteUserRepository
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 
+logger = logging.getLogger(__name__)
+
+DEFAULT_USER_EMAIL = "admin@example.com"
+DEFAULT_USER_PASSWORD = "admin123"
+DEFAULT_USER_FULLNAME = "Admin User"
+
+
+def _seed_default_user() -> None:
+    db = SessionLocal()
+    try:
+        service = UserService(SQLiteUserRepository(db))
+        users = service.get_all_users()
+        if not users:
+            user = service.create_user(
+                fullname=DEFAULT_USER_FULLNAME,
+                email=DEFAULT_USER_EMAIL,
+                password=DEFAULT_USER_PASSWORD,
+            )
+            logger.info(
+                "Default user created — email: %s  password: %s  id: %s",
+                DEFAULT_USER_EMAIL,
+                DEFAULT_USER_PASSWORD,
+                user.id,
+            )
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    _seed_default_user()
     yield
 
 
@@ -61,6 +92,7 @@ app.add_exception_handler(UserNotFoundError, user_not_found_handler)
 app.add_exception_handler(UserAlreadyExistsError, user_already_exists_handler)
 
 # --- Routers ---
+app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(tasks.router)
 app.include_router(projects.router)

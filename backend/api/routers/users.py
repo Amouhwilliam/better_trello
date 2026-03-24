@@ -3,7 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
 
-from api.dependencies import get_user_service
+from api.dependencies import get_current_user_id, get_user_service
 from api.schemas.user import UserCreate, UserResponse, UserUpdate
 from application.user_service import UserService
 
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/users", tags=["Users"])
     response_model=List[UserResponse],
     summary="List all users",
 )
-def list_users(service: UserService = Depends(get_user_service)):
+def list_users(service: UserService = Depends(get_user_service), _: UUID = Depends(get_current_user_id)):
     return [UserResponse.from_domain(u) for u in service.get_all_users()]
 
 
@@ -24,7 +24,7 @@ def list_users(service: UserService = Depends(get_user_service)):
     response_model=UserResponse,
     summary="Get a user by ID",
 )
-def get_user(user_id: UUID, service: UserService = Depends(get_user_service)):
+def get_user(user_id: UUID, service: UserService = Depends(get_user_service), _: UUID = Depends(get_current_user_id)):
     return UserResponse.from_domain(service.get_user(user_id))
 
 
@@ -49,6 +49,7 @@ def update_user(
     user_id: UUID,
     body: UserUpdate,
     service: UserService = Depends(get_user_service),
+    _: UUID = Depends(get_current_user_id),
 ):
     user = service.update_user(
         user_id=user_id,
@@ -64,5 +65,5 @@ def update_user(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a user",
 )
-def delete_user(user_id: UUID, service: UserService = Depends(get_user_service)):
+def delete_user(user_id: UUID, service: UserService = Depends(get_user_service), _: UUID = Depends(get_current_user_id)):
     service.delete_user(user_id)

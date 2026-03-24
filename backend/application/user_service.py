@@ -28,6 +28,12 @@ class UserService:
     def get_all_users(self) -> List[User]:
         return self._user_repo.find_all()
 
+    def get_user_by_email(self, email: str) -> User:
+        user = self._user_repo.find_by_email(email)
+        if user is None:
+            raise UserNotFoundError(f"User with email '{email}' not found")
+        return user
+
     # ------------------------------------------------------------------
     # Commands
     # ------------------------------------------------------------------

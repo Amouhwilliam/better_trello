@@ -1,12 +1,27 @@
-import { LogOut, Kanban } from "lucide-react";
-import Link from "next/link";
-import { notFound } from "next/navigation";
+import { Kanban } from "lucide-react";
+import { notFound, redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { DashboardClient } from "./DashboardClient";
+import SignOutButton from "./SignOutButton";
 
 const API_URL = process.env.API_URL ?? "http://api:8000";
 
-async function getUser(userId: string) {
-  const res = await fetch(`${API_URL}/users/${userId}`, { cache: "no-store" });
+function getUserIdFromToken(token: string): string | null {
+  try {
+    // base64url → base64: replace - with + and _ with /
+    const base64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const payload = JSON.parse(Buffer.from(base64, "base64").toString("utf8"));
+    return typeof payload.sub === "string" ? payload.sub : null;
+  } catch {
+    return null;
+  }
+}
+
+async function getUser(userId: string, token: string) {
+  const res = await fetch(`${API_URL}/users/${userId}`, {
+    cache: "no-store",
+    headers: { Authorization: `Bearer ${token}` },
+  });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error("Failed to fetch user");
   return res.json() as Promise<{ id: string; fullname: string; email: string }>;
@@ -17,10 +32,19 @@ export default async function DashboardPage({
 }: {
   searchParams: Promise<{ userId?: string }>;
 }) {
-  const { userId } = await searchParams;
-  if (!userId) notFound();
+  const token = (await cookies()).get("bt_token")?.value;
+  if (!token) redirect("/");
 
-  const user = await getUser(userId);
+  const { userId: userIdParam } = await searchParams;
+
+  // If userId not in URL, decode from token and redirect so URL is canonical
+  if (!userIdParam) {
+    const decoded = getUserIdFromToken(token);
+    if (!decoded) redirect("/");
+    redirect(`/dashboard?userId=${decoded}`);
+  }
+
+  const user = await getUser(userIdParam, token);
   if (!user) notFound();
 
   const firstName = user.fullname.split(" ")[0];
@@ -46,13 +70,7 @@ export default async function DashboardPage({
                 .slice(0, 2)
                 .toUpperCase()}
             </div>
-            <Link
-              href="/"
-              className="flex items-center gap-1.5 text-xs text-slate-400 transition-colors hover:text-slate-600"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-              Sign out
-            </Link>
+            <SignOutButton />
           </div>
         </div>
       </header>
@@ -60,7 +78,6 @@ export default async function DashboardPage({
       {/* Main */}
       <main className="flex-1 px-4 py-12">
         <div className="mx-auto w-full max-w-5xl">
-          {/* Greeting */}
           <div className="mb-10">
             <h1 className="text-3xl font-bold tracking-tight text-slate-900">
               Hello, {firstName}! 👋
@@ -70,7 +87,6 @@ export default async function DashboardPage({
             </p>
           </div>
 
-          {/* Tabs + content */}
           <DashboardClient userId={user.id} />
         </div>
       </main>

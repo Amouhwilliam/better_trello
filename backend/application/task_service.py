@@ -6,8 +6,8 @@ from config import Config
 from domain.events import TaskReopened
 from domain.exceptions import ProjectNotFoundError, TaskNotFoundError, UserNotFoundError
 from domain.models.task import Task
+from domain.ports.notification_port import NotificationPort
 from domain.ports.repositories import ProjectRepository, TaskRepository, UserRepository
-from infrastructure.notifications.notification_service import NotificationService
 
 
 class TaskService:
@@ -16,7 +16,7 @@ class TaskService:
         task_repo: TaskRepository,
         project_repo: ProjectRepository,
         user_repo: UserRepository,
-        notifications: NotificationService,
+        notifications: NotificationPort,
         config: Config,
     ) -> None:
         self._task_repo = task_repo

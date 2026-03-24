@@ -3,7 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
 
-from api.dependencies import get_project_service, get_task_service
+from api.dependencies import get_current_user_id, get_project_service, get_task_service
 from api.schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate
 from api.schemas.task import TaskResponse
 from application.project_service import ProjectService
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/projects", tags=["Projects"])
     response_model=List[ProjectResponse],
     summary="List all projects",
 )
-def list_projects(service: ProjectService = Depends(get_project_service)):
+def list_projects(service: ProjectService = Depends(get_project_service), _: UUID = Depends(get_current_user_id)):
     return [ProjectResponse.from_domain(p) for p in service.get_all_projects()]
 
 
@@ -26,7 +26,7 @@ def list_projects(service: ProjectService = Depends(get_project_service)):
     response_model=ProjectResponse,
     summary="Get a project by ID",
 )
-def get_project(project_id: UUID, service: ProjectService = Depends(get_project_service)):
+def get_project(project_id: UUID, service: ProjectService = Depends(get_project_service), _: UUID = Depends(get_current_user_id)):
     return ProjectResponse.from_domain(service.get_project(project_id))
 
 
@@ -36,7 +36,7 @@ def get_project(project_id: UUID, service: ProjectService = Depends(get_project_
     status_code=status.HTTP_201_CREATED,
     summary="Create a project",
 )
-def create_project(body: ProjectCreate, service: ProjectService = Depends(get_project_service)):
+def create_project(body: ProjectCreate, service: ProjectService = Depends(get_project_service), _: UUID = Depends(get_current_user_id)):
     return ProjectResponse.from_domain(
         service.create_project(title=body.title, deadline=body.deadline, owner_id=body.owner_id)
     )
@@ -56,6 +56,7 @@ def update_project(
     project_id: UUID,
     body: ProjectUpdate,
     service: ProjectService = Depends(get_project_service),
+    _: UUID = Depends(get_current_user_id),
 ):
     return ProjectResponse.from_domain(
         service.update_project(project_id=project_id, title=body.title, deadline=body.deadline)
@@ -67,7 +68,7 @@ def update_project(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a project",
 )
-def delete_project(project_id: UUID, service: ProjectService = Depends(get_project_service)):
+def delete_project(project_id: UUID, service: ProjectService = Depends(get_project_service), _: UUID = Depends(get_current_user_id)):
     service.delete_project(project_id)
 
 
@@ -77,7 +78,7 @@ def delete_project(project_id: UUID, service: ProjectService = Depends(get_proje
     summary="Mark a project as completed",
     description="All tasks in the project must be completed first, otherwise a 422 is returned.",
 )
-def complete_project(project_id: UUID, service: ProjectService = Depends(get_project_service)):
+def complete_project(project_id: UUID, service: ProjectService = Depends(get_project_service), _: UUID = Depends(get_current_user_id)):
     return ProjectResponse.from_domain(service.complete_project(project_id))
 
 
@@ -86,7 +87,7 @@ def complete_project(project_id: UUID, service: ProjectService = Depends(get_pro
     response_model=List[TaskResponse],
     summary="List all tasks for a project",
 )
-def get_project_tasks(project_id: UUID, service: ProjectService = Depends(get_project_service)):
+def get_project_tasks(project_id: UUID, service: ProjectService = Depends(get_project_service), _: UUID = Depends(get_current_user_id)):
     return [TaskResponse.from_domain(t) for t in service.get_project_tasks(project_id)]
 
 
@@ -100,6 +101,7 @@ def link_task(
     project_id: UUID,
     task_id: UUID,
     task_service: TaskService = Depends(get_task_service),
+    _: UUID = Depends(get_current_user_id),
 ):
     return TaskResponse.from_domain(task_service.link_task_to_project(task_id, project_id))
 
@@ -113,5 +115,6 @@ def unlink_task(
     project_id: UUID,
     task_id: UUID,
     task_service: TaskService = Depends(get_task_service),
+    _: UUID = Depends(get_current_user_id),
 ):
     return TaskResponse.from_domain(task_service.unlink_task_from_project(task_id, project_id))

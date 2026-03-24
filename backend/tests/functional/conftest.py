@@ -20,6 +20,7 @@ Usage:
 
 import os
 from unittest.mock import patch
+from uuid import UUID
 
 import httpx
 import pytest
@@ -28,8 +29,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 import infrastructure.db.orm_models  # noqa: F401 — registers ORM models with Base
+from api.dependencies import get_current_user_id
 from infrastructure.db.database import Base, get_db
 from main import app
+
+# Fixed UUID used as the authenticated user in all functional tests
+TEST_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 
 def pytest_addoption(parser):
@@ -75,10 +80,12 @@ def client(request, tmp_path_factory):
                 db.close()
 
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_user_id] = lambda: TEST_USER_ID
 
-        # Patch init_db so the lifespan startup doesn't try to write to
-        # /app/data/tasks.db (production path that doesn't exist locally).
-        with patch("main.init_db"), TestClient(app, raise_server_exceptions=True) as c:
+        # Patch init_db and _seed_default_user so the lifespan startup doesn't
+        # try to write to /app/data/tasks.db (production path that doesn't exist locally).
+        with patch("main.init_db"), patch("main._seed_default_user"), \
+                TestClient(app, raise_server_exceptions=True) as c:
             yield c
 
         app.dependency_overrides.clear()
