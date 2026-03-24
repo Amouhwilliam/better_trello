@@ -57,6 +57,7 @@ export function BoardClient({
   projectCompleted: boolean;
   projectAutoComplete: boolean;
 }) {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [createForStatus, setCreateForStatus] = useState<TaskStatus | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -90,7 +91,10 @@ export function BoardClient({
       );
       return { prev };
     },
-    onSuccess: (_data, { status }) => toast.success(`Task moved to ${STATUS_LABEL[status]}.`),
+    onSuccess: (_data, { status }) => {
+      toast.success(`Task moved to ${STATUS_LABEL[status]}.`);
+      if (status === "completed") router.refresh();
+    },
     onError: (_err, _vars, ctx) => {
       if (ctx?.prev) queryClient.setQueryData(["project-tasks", projectId], ctx.prev);
       toast.error("Failed to move task. Please try again.");
