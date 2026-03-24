@@ -11,6 +11,18 @@ router = APIRouter(prefix="/users", tags=["Users"])
 
 
 @router.get(
+    "/me",
+    response_model=UserResponse,
+    summary="Get the currently authenticated user",
+)
+def get_me(
+    current_user_id: UUID = Depends(get_current_user_id),
+    service: UserService = Depends(get_user_service),
+):
+    return UserResponse.from_domain(service.get_user(current_user_id))
+
+
+@router.get(
     "",
     response_model=List[UserResponse],
     summary="List all users",

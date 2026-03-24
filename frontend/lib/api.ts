@@ -84,6 +84,7 @@ export interface CreateTaskPayload {
 
 export const api = {
   users: {
+    me: () => request<User>("/users/me"),
     list: () => request<User[]>("/users"),
     get: (id: string) => request<User>(`/users/${id}`),
     create: (payload: CreateUserPayload) =>
@@ -101,6 +102,14 @@ export const api = {
     tasks: (id: string) => request<Task[]>(`/projects/${id}/tasks`),
   },
   tasks: {
+    list: (params?: { completed?: boolean; overdue?: boolean; project_id?: string }) => {
+      const qs = new URLSearchParams();
+      if (params?.completed !== undefined) qs.set("completed", String(params.completed));
+      if (params?.overdue !== undefined) qs.set("overdue", String(params.overdue));
+      if (params?.project_id) qs.set("project_id", params.project_id);
+      const query = qs.toString();
+      return request<Task[]>(`/tasks${query ? `?${query}` : ""}`);
+    },
     create: (payload: CreateTaskPayload) =>
       request<Task>("/tasks", { method: "POST", body: JSON.stringify(payload) }),
     update: (taskId: string, payload: Partial<{ title: string; description: string; deadline: string }>) =>
@@ -111,5 +120,9 @@ export const api = {
       request<Task>(`/tasks/${taskId}/assign/${userId}`, { method: "PATCH" }),
     unassign: (taskId: string) =>
       request<Task>(`/tasks/${taskId}/unassign`, { method: "PATCH" }),
+    linkProject: (taskId: string, projectId: string) =>
+      request<Task>(`/projects/${projectId}/tasks/${taskId}/link`, { method: "POST" }),
+    unlinkProject: (taskId: string, projectId: string) =>
+      request<Task>(`/projects/${projectId}/tasks/${taskId}/unlink`, { method: "DELETE" }),
   },
 };

@@ -28,6 +28,50 @@ def create_user(
 
 
 # ---------------------------------------------------------------------------
+# GET /users/me
+# ---------------------------------------------------------------------------
+
+class TestGetMe:
+    def test_returns_own_user(self, client: TestClient):
+        """Create a user, override auth to that user's ID, then call /me."""
+        import uuid
+        from unittest.mock import patch
+
+        from api.dependencies import get_current_user_id
+        from main import app
+
+        u = create_user(client, email="me_test@x.com")
+        user_uuid = uuid.UUID(u["id"])
+
+        # Only works in in-process mode (TestClient); in live-server mode skip.
+        if not hasattr(app, "dependency_overrides"):
+            return
+
+        original = app.dependency_overrides.get(get_current_user_id)
+        app.dependency_overrides[get_current_user_id] = lambda: user_uuid
+        try:
+            r = client.get("/users/me")
+            assert r.status_code == 200
+            body = r.json()
+            assert body["id"] == u["id"]
+            assert body["email"] == "me_test@x.com"
+            assert "password" not in body
+            assert "password_hash" not in body
+        finally:
+            if original is None:
+                app.dependency_overrides.pop(get_current_user_id, None)
+            else:
+                app.dependency_overrides[get_current_user_id] = original
+
+    def test_returns_404_for_unknown_auth_id(self, client: TestClient):
+        """When the JWT points to a non-existent user, /me returns 404."""
+        r = client.get("/users/me")
+        # TEST_USER_ID has no matching row → 404
+        assert r.status_code == 404
+        assert "detail" in r.json()
+
+
+# ---------------------------------------------------------------------------
 # POST /users
 # ---------------------------------------------------------------------------
 

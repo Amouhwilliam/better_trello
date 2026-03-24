@@ -5,14 +5,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Kanban, Plus, X, Loader2, Users, FolderKanban, CheckCircle2, Clock, Eye, EyeOff } from "lucide-react";
+import { Kanban, Plus, X, Loader2, Users, FolderKanban, CheckCircle2, Clock, Eye, EyeOff, ListTodo, Calendar, UserPlus, AlertCircle, Pencil, Search, Link2Off } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { api, type Project, type User } from "@/lib/api";
+import { api, type Project, type Task, type User } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import SignOutButton from "./SignOutButton";
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -24,7 +25,7 @@ type ProjectForm = z.infer<typeof projectSchema>;
 
 const userSchema = z.object({
   fullname: z.string().min(2, "Full name must be at least 2 characters."),
-  email: z.string().email("Please enter a valid email address."),
+  email: z.email("Please enter a valid email address."),
   password: z.string().min(6, "Password must be at least 6 characters."),
 });
 type UserForm = z.infer<typeof userSchema>;
@@ -33,16 +34,23 @@ type UserForm = z.infer<typeof userSchema>;
 
 const ACCENT = ["indigo", "violet", "sky", "emerald", "rose", "amber"] as const;
 const accent = (i: number) => ACCENT[i % ACCENT.length];
-type Tab = "projects" | "contributors";
+type Tab = "projects" | "contributors" | "tasks";
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function DashboardClient({ userId }: { userId: string }) {
+export function DashboardClient() {
   const [tab, setTab] = useState<Tab>("projects");
   const [projectModalOpen, setProjectModalOpen] = useState(false);
   const [userModalOpen, setUserModalOpen] = useState(false);
   const [showContributorPassword, setShowContributorPassword] = useState(false);
   const queryClient = useQueryClient();
+
+  const { data: currentUser } = useQuery({
+    queryKey: ["me"],
+    queryFn: () => api.users.me(),
+  });
+
+  const userId = currentUser?.id ?? "";
 
   const { data: projects = [], isLoading: loadingProjects } = useQuery({
     queryKey: ["projects"],
@@ -52,8 +60,18 @@ export function DashboardClient({ userId }: { userId: string }) {
   const { data: users = [], isLoading: loadingUsers } = useQuery({
     queryKey: ["users"],
     queryFn: () => api.users.list(),
-    enabled: tab === "contributors",
+    enabled: tab === "contributors" || tab === "tasks",
   });
+
+  const { data: allTasks = [], isLoading: loadingTasks } = useQuery({
+    queryKey: ["all-tasks"],
+    queryFn: () => api.tasks.list(),
+    enabled: tab === "tasks",
+  });
+
+  const [editingTaskProject, setEditingTaskProject] = useState<Task | null>(null);
+  const [taskPage, setTaskPage] = useState(1);
+  const TASKS_PER_PAGE = 15;
 
   // ── Project form ──
   const {
@@ -107,11 +125,49 @@ export function DashboardClient({ userId }: { userId: string }) {
     },
   });
 
+  const firstName = currentUser?.fullname.split(" ")[0] ?? "";
+  const initials = currentUser?.fullname
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() ?? "";
+
   return (
-    <>
+    <div className="flex min-h-screen flex-col bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+      {/* Navbar */}
+      <header className="border-b border-slate-200 bg-white/70 backdrop-blur-sm">
+        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600">
+              <Kanban className="h-4 w-4 text-white" />
+            </div>
+            <span className="text-sm font-semibold text-slate-800">Better Trello</span>
+          </div>
+          <div className="flex items-center gap-3">
+            {initials && (
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-xs font-semibold text-indigo-700">
+                {initials}
+              </div>
+            )}
+            <SignOutButton />
+          </div>
+        </div>
+      </header>
+
+      {/* Main */}
+      <main className="flex-1 px-4 py-12">
+        <div className="mx-auto w-full max-w-5xl">
+          <div className="mb-10">
+            <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+              {firstName ? `Hello, ${firstName}! 👋` : "Welcome!"}
+            </h1>
+            <p className="mt-2 text-sm text-slate-500">Here&apos;s what&apos;s on your plate today.</p>
+          </div>
+
       {/* Tabs */}
       <div className="mb-8 flex items-center gap-1 border-b border-slate-200">
-        {(["projects", "contributors"] as Tab[]).map((t) => (
+        {(["projects", "contributors", "tasks"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -121,7 +177,7 @@ export function DashboardClient({ userId }: { userId: string }) {
                 : "border-transparent text-slate-500 hover:text-slate-700"
             }`}
           >
-            {t === "projects" ? <FolderKanban className="h-4 w-4" /> : <Users className="h-4 w-4" />}
+            {t === "projects" ? <FolderKanban className="h-4 w-4" /> : t === "contributors" ? <Users className="h-4 w-4" /> : <ListTodo className="h-4 w-4" />}
             {t}
           </button>
         ))}
@@ -189,6 +245,111 @@ export function DashboardClient({ userId }: { userId: string }) {
             </div>
           )}
         </>
+      )}
+
+      {/* Tasks tab */}
+      {tab === "tasks" && (() => {
+        const totalPages = Math.max(1, Math.ceil(allTasks.length / TASKS_PER_PAGE));
+        const pageTasks = allTasks.slice((taskPage - 1) * TASKS_PER_PAGE, taskPage * TASKS_PER_PAGE);
+        return (
+          <>
+            <div className="mb-6 flex items-center justify-between">
+              <p className="text-sm text-slate-500">
+                {allTasks.length === 0
+                  ? "No tasks yet."
+                  : `${allTasks.length} task${allTasks.length > 1 ? "s" : ""} across all projects`}
+              </p>
+            </div>
+
+            {loadingTasks ? (
+              <div className="flex justify-center py-16">
+                <Loader2 className="h-6 w-6 animate-spin text-slate-300" />
+              </div>
+            ) : allTasks.length === 0 ? (
+              <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white/50 py-16 text-slate-400">
+                <ListTodo className="mb-3 h-10 w-10 opacity-30" />
+                <p className="text-sm">No tasks found on the platform.</p>
+              </div>
+            ) : (
+              <>
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-100 bg-slate-50">
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Title</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Due date</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Assignee</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Project</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {pageTasks.map((task) => (
+                        <TaskRow
+                          key={task.id}
+                          task={task}
+                          assignee={task.assignee_id ? users.find((u) => u.id === task.assignee_id) : undefined}
+                          project={task.project_id ? projects.find((p) => p.id === task.project_id) : undefined}
+                          onEditProject={() => setEditingTaskProject(task)}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {totalPages > 1 && (
+                  <div className="mt-4 flex items-center justify-between">
+                    <p className="text-xs text-slate-400">
+                      Showing {(taskPage - 1) * TASKS_PER_PAGE + 1}–{Math.min(taskPage * TASKS_PER_PAGE, allTasks.length)} of {allTasks.length}
+                    </p>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setTaskPage((p) => Math.max(1, p - 1))}
+                        disabled={taskPage === 1}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-colors hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        ‹
+                      </button>
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                        <button
+                          key={p}
+                          onClick={() => setTaskPage(p)}
+                          className={`flex h-8 w-8 items-center justify-center rounded-lg border text-xs font-medium transition-colors ${
+                            p === taskPage
+                              ? "border-indigo-600 bg-indigo-600 text-white"
+                              : "border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:text-indigo-600"
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => setTaskPage((p) => Math.min(totalPages, p + 1))}
+                        disabled={taskPage === totalPages}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-colors hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        ›
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        );
+      })()}
+
+      {/* Task project edit modal */}
+      {editingTaskProject && (
+        <TaskProjectModal
+          task={editingTaskProject}
+          projects={projects}
+          onDone={() => {
+            setEditingTaskProject(null);
+            queryClient.invalidateQueries({ queryKey: ["all-tasks"] });
+          }}
+          onClose={() => setEditingTaskProject(null)}
+        />
       )}
 
       {/* New project modal */}
@@ -274,7 +435,10 @@ export function DashboardClient({ userId }: { userId: string }) {
           </form>
         </Modal>
       )}
-    </>
+
+        </div>
+      </main>
+    </div>
   );
 }
 
@@ -364,6 +528,224 @@ function ProjectCard({ project, colorIndex }: { project: Project; colorIndex: nu
         {deadline.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
       </p>
     </Link>
+  );
+}
+
+function TaskRow({
+  task,
+  assignee,
+  project,
+  onEditProject,
+}: {
+  task: Task;
+  assignee?: User;
+  project?: Project;
+  onEditProject: () => void;
+}) {
+  const [hoveringProject, setHoveringProject] = useState(false);
+  const deadline = new Date(task.deadline);
+  const now = new Date();
+  const isOverdue = !task.completed && deadline < now;
+
+  const statusColors: Record<string, string> = {
+    todo: "bg-slate-100 text-slate-600",
+    in_progress: "bg-blue-50 text-blue-700",
+    completed: "bg-emerald-50 text-emerald-700",
+  };
+  const statusLabels: Record<string, string> = {
+    todo: "To Do",
+    in_progress: "In Progress",
+    completed: "Completed",
+  };
+
+  return (
+    <tr className="transition-colors hover:bg-slate-50">
+      <td className="px-4 py-3 font-medium text-slate-800">{task.title}</td>
+      <td className="px-4 py-3">
+        <span className={`flex items-center gap-1 text-xs ${isOverdue ? "text-red-500 font-medium" : "text-slate-500"}`}>
+          {isOverdue && <AlertCircle className="h-3 w-3 shrink-0" />}
+          <Calendar className="h-3 w-3 shrink-0" />
+          {deadline.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+        </span>
+      </td>
+      <td className="px-4 py-3">
+        {assignee ? (
+          <span className="flex items-center gap-1.5">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[9px] font-bold text-indigo-700">
+              {assignee.fullname.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+            </span>
+            <span className="text-xs text-slate-700">{assignee.fullname}</span>
+          </span>
+        ) : (
+          <span className="flex items-center gap-1 text-xs text-slate-300">
+            <UserPlus className="h-3 w-3" />
+            Unassigned
+          </span>
+        )}
+      </td>
+      <td
+        className="px-4 py-3"
+        onMouseEnter={() => setHoveringProject(true)}
+        onMouseLeave={() => setHoveringProject(false)}
+      >
+        <span className="flex items-center gap-1.5">
+          {project ? (
+            <Link
+              href={`/projects/${project.id}`}
+              className="text-xs font-medium text-indigo-600 hover:underline"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {project.title}
+            </Link>
+          ) : (
+            <span className="text-xs text-slate-300">—</span>
+          )}
+          <button
+            onClick={onEditProject}
+            className={`flex h-5 w-5 items-center justify-center rounded transition-opacity ${
+              hoveringProject ? "opacity-100" : "opacity-0"
+            } text-slate-400 hover:text-indigo-600 hover:bg-indigo-50`}
+          >
+            <Pencil className="h-3 w-3" />
+          </button>
+        </span>
+      </td>
+      <td className="px-4 py-3">
+        <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${statusColors[task.status] ?? statusColors.todo}`}>
+          {statusLabels[task.status] ?? task.status}
+        </span>
+      </td>
+    </tr>
+  );
+}
+
+// ─── Task project modal ───────────────────────────────────────────────────────
+
+function TaskProjectModal({
+  task,
+  projects,
+  onDone,
+  onClose,
+}: {
+  task: Task;
+  projects: Project[];
+  onDone: () => void;
+  onClose: () => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<Project | null>(
+    projects.find((p) => p.id === task.project_id) ?? null
+  );
+
+  const { mutate: save, isPending } = useMutation({
+    mutationFn: async () => {
+      if (selected?.id === task.project_id) return; // nothing changed
+      if (task.project_id && !selected) {
+        // unlink
+        await api.tasks.unlinkProject(task.id, task.project_id);
+      } else if (selected) {
+        // link (will replace existing via backend logic)
+        await api.tasks.linkProject(task.id, selected.id);
+      }
+    },
+    onSuccess: () => {
+      toast.success("Task project updated.");
+      onDone();
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const filtered = projects.filter((p) =>
+    p.title.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">Edit project</h2>
+            <p className="mt-0.5 text-xs text-slate-400 truncate max-w-[220px]">
+              Task: <span className="font-medium text-slate-600">{task.title}</span>
+            </p>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 transition-colors">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="px-6 py-4 space-y-3">
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+            <Input
+              autoFocus
+              placeholder="Search projects…"
+              className="h-9 pl-8 text-sm"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
+          {/* Project list */}
+          <div className="max-h-52 overflow-y-auto rounded-xl border border-slate-100 divide-y divide-slate-50">
+            {/* None option */}
+            <button
+              type="button"
+              onClick={() => setSelected(null)}
+              className={`flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm transition-colors ${
+                selected === null ? "bg-indigo-50 text-indigo-700 font-medium" : "text-slate-400 hover:bg-slate-50"
+              }`}
+            >
+              <Link2Off className="h-3.5 w-3.5 shrink-0" />
+              No project
+            </button>
+
+            {filtered.length === 0 && (
+              <p className="py-4 text-center text-xs text-slate-400">No projects match.</p>
+            )}
+
+            {filtered.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setSelected(p)}
+                className={`flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm transition-colors ${
+                  selected?.id === p.id ? "bg-indigo-50 text-indigo-700 font-medium" : "text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                <span className="truncate">{p.title}</span>
+                {selected?.id === p.id && (
+                  <span className="shrink-0 text-xs text-indigo-400">selected</span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="outline" className="flex-1 h-9" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={isPending || selected?.id === task.project_id}
+              onClick={() => save()}
+              className="flex-1 h-9 bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40"
+            >
+              {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

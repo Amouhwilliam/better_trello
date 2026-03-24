@@ -69,6 +69,7 @@ export function BoardClient({
   const { data: tasks = [], isLoading } = useQuery({
     queryKey: ["project-tasks", projectId],
     queryFn: () => api.projects.tasks(projectId),
+    refetchOnMount: "always",
   });
 
   const { data: users = [] } = useQuery({
