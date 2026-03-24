@@ -51,10 +51,13 @@ class ProjectService:
         project_id: UUID,
         title: Optional[str] = None,
         deadline: Optional[datetime] = None,
+        auto_complete: Optional[bool] = None,
     ) -> Project:
         project = self.get_project(project_id)
         tasks = self._task_repo.find_by_project(project_id)
 
+        if auto_complete is not None:
+            project.auto_complete = auto_complete
         project.update(title=title, deadline=deadline, tasks=tasks)
         saved = self._project_repo.save(project)
 

@@ -48,6 +48,7 @@ export interface Project {
   title: string;
   deadline: string;
   completed: boolean;
+  auto_complete: boolean;
   owner_id: string | null;
   created_at: string;
   updated_at: string;
@@ -93,8 +94,10 @@ export const api = {
     get: (id: string) => request<Project>(`/projects/${id}`),
     create: (payload: CreateProjectPayload) =>
       request<Project>("/projects", { method: "POST", body: JSON.stringify(payload) }),
-    update: (id: string, payload: Partial<{ title: string; deadline: string }>) =>
+    update: (id: string, payload: Partial<{ title: string; deadline: string; auto_complete: boolean }>) =>
       request<Project>(`/projects/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+    complete: (id: string) =>
+      request<Project>(`/projects/${id}/complete`, { method: "PATCH" }),
     tasks: (id: string) => request<Task[]>(`/projects/${id}/tasks`),
   },
   tasks: {

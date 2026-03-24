@@ -31,6 +31,7 @@ class ProjectORM(Base):
     title = Column(String, nullable=False)
     deadline = Column(DateTime, nullable=False)
     completed = Column(Boolean, default=False, nullable=False)
+    auto_complete = Column(Boolean, default=False, nullable=False)
     owner_id = Column(String(36), ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, nullable=False)
     updated_at = Column(DateTime, nullable=False)

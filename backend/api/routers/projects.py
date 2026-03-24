@@ -59,7 +59,7 @@ def update_project(
     _: UUID = Depends(get_current_user_id),
 ):
     return ProjectResponse.from_domain(
-        service.update_project(project_id=project_id, title=body.title, deadline=body.deadline)
+        service.update_project(project_id=project_id, title=body.title, deadline=body.deadline, auto_complete=body.auto_complete)
     )
 
 

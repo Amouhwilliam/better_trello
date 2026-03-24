@@ -8,7 +8,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
-  Plus, X, Loader2, UserPlus, Search, Calendar, AlertCircle, ChevronDown, Pencil,
+  Plus, X, Loader2, UserPlus, Search, Calendar, AlertCircle, ChevronDown, Pencil, CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api, type Task, type TaskStatus, type User } from "@/lib/api";
@@ -47,11 +47,15 @@ export function BoardClient({
   projectId,
   projectTitle: initialTitle,
   projectDeadline: initialDeadline,
+  projectCompleted: initialCompleted,
+  projectAutoComplete: initialAutoComplete,
 }: {
   projectId: string;
   userId: string;
   projectTitle: string;
   projectDeadline: string;
+  projectCompleted: boolean;
+  projectAutoComplete: boolean;
 }) {
   const queryClient = useQueryClient();
   const [createForStatus, setCreateForStatus] = useState<TaskStatus | null>(null);
@@ -59,6 +63,8 @@ export function BoardClient({
   const [editingProject, setEditingProject] = useState(false);
   const [projectTitle, setProjectTitle] = useState(initialTitle);
   const [projectDeadline, setProjectDeadline] = useState(initialDeadline);
+  const [projectCompleted, setProjectCompleted] = useState(initialCompleted);
+  const [projectAutoComplete, setProjectAutoComplete] = useState(initialAutoComplete);
 
   const { data: tasks = [], isLoading } = useQuery({
     queryKey: ["project-tasks", projectId],
@@ -211,9 +217,14 @@ export function BoardClient({
           projectId={projectId}
           currentTitle={projectTitle}
           currentDeadline={projectDeadline}
+          isCompleted={projectCompleted}
+          autoComplete={projectAutoComplete}
+          tasks={tasks}
           onDone={(updated) => {
             setProjectTitle(updated.title);
             setProjectDeadline(updated.deadline);
+            if (updated.completed !== undefined) setProjectCompleted(updated.completed);
+            if (updated.auto_complete !== undefined) setProjectAutoComplete(updated.auto_complete);
             setEditingProject(false);
           }}
           onClose={() => setEditingProject(false)}
@@ -235,17 +246,25 @@ function ProjectEditModal({
   projectId,
   currentTitle,
   currentDeadline,
+  isCompleted,
+  autoComplete,
+  tasks,
   onDone,
   onClose,
 }: {
   projectId: string;
   currentTitle: string;
   currentDeadline: string;
-  onDone: (updated: { title: string; deadline: string }) => void;
+  isCompleted: boolean;
+  autoComplete: boolean;
+  tasks: Task[];
+  onDone: (updated: { title: string; deadline: string; completed?: boolean; auto_complete?: boolean }) => void;
   onClose: () => void;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const [autoCompleteEnabled, setAutoCompleteEnabled] = useState(autoComplete);
+  const allTasksDone = tasks.length > 0 && tasks.every((t) => t.completed);
   const toLocalDatetime = (iso: string) => {
     const d = new Date(iso);
     const pad = (n: number) => String(n).padStart(2, "0");
@@ -270,15 +289,29 @@ function ProjectEditModal({
       api.projects.update(projectId, {
         title: v.title,
         deadline: new Date(v.deadline).toISOString(),
+        auto_complete: autoCompleteEnabled,
       }),
     onSuccess: (updated) => {
       toast.success(`Project "${updated.title}" updated.`);
-      onDone({ title: updated.title, deadline: updated.deadline });
+      onDone({ title: updated.title, deadline: updated.deadline, auto_complete: updated.auto_complete });
       queryClient.invalidateQueries({ queryKey: ["project-tasks", projectId] });
       router.refresh();
     },
     onError: (err: Error) => {
       setError("root", { message: err.message });
+      toast.error(err.message);
+    },
+  });
+
+  const { mutate: completeProject, isPending: isCompleting } = useMutation({
+    mutationFn: () => api.projects.complete(projectId),
+    onSuccess: (updated) => {
+      toast.success(`Project "${updated.title}" marked as completed.`);
+      onDone({ title: updated.title, deadline: updated.deadline, completed: true });
+      queryClient.invalidateQueries({ queryKey: ["project-tasks", projectId] });
+      router.refresh();
+    },
+    onError: (err: Error) => {
       toast.error(err.message);
     },
   });
@@ -317,6 +350,28 @@ function ProjectEditModal({
             {errors.deadline && <p className="text-xs text-red-500">{errors.deadline.message}</p>}
           </div>
 
+          <div className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-slate-700">Auto-complete project</p>
+              <p className="mt-0.5 text-xs text-slate-400">Mark project done when all tasks are completed.</p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={autoCompleteEnabled}
+              onClick={() => setAutoCompleteEnabled((v) => !v)}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${
+                autoCompleteEnabled ? "bg-indigo-600" : "bg-slate-200"
+              }`}
+            >
+              <span
+                className={`inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform ${
+                  autoCompleteEnabled ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+
           {errors.root && (
             <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{errors.root.message}</p>
           )}
@@ -325,10 +380,40 @@ function ProjectEditModal({
             <Button type="button" variant="outline" className="flex-1 h-10" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isPending} className="flex-1 h-10 bg-indigo-600 text-white hover:bg-indigo-700">
+            <Button type="submit" disabled={isPending || isCompleting} className="flex-1 h-10 bg-indigo-600 text-white hover:bg-indigo-700">
               {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save changes"}
             </Button>
           </div>
+
+          {!isCompleted && (
+            <div className="border-t border-slate-100 pt-4 mt-2">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-700">Mark as completed</p>
+                  {!allTasksDone && (
+                    <p className="mt-0.5 text-xs text-amber-600">
+                      All tasks must be completed first ({tasks.filter((t) => !t.completed).length} remaining).
+                    </p>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  disabled={!allTasksDone || isCompleting || isPending}
+                  onClick={() => completeProject()}
+                  className="shrink-0 h-9 bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40"
+                >
+                  {isCompleting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Complete project"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {isCompleted && (
+            <div className="border-t border-slate-100 pt-4 mt-2 flex items-center gap-2 text-xs text-emerald-600">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              This project is already marked as completed.
+            </div>
+          )}
         </form>
       </div>
     </div>

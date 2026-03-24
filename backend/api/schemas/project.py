@@ -16,6 +16,7 @@ class ProjectCreate(BaseModel):
 class ProjectUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1)
     deadline: Optional[datetime] = None
+    auto_complete: Optional[bool] = None
 
 
 class ProjectResponse(BaseModel):
@@ -23,6 +24,7 @@ class ProjectResponse(BaseModel):
     title: str
     deadline: datetime
     completed: bool
+    auto_complete: bool
     owner_id: Optional[UUID]
     created_at: datetime
     updated_at: datetime
@@ -34,6 +36,7 @@ class ProjectResponse(BaseModel):
             title=project.title,
             deadline=project.deadline,
             completed=project.completed,
+            auto_complete=project.auto_complete,
             owner_id=project.owner_id,
             created_at=project.created_at,
             updated_at=project.updated_at,

@@ -143,29 +143,34 @@ class TestProjectReopen:
 
 class TestProjectAutoComplete:
     def test_auto_complete_enabled_all_tasks_done(self, project: Project):
+        project.auto_complete = True
         tasks = [make_completed_task(project)]
-        project.try_auto_complete(tasks, auto_complete_enabled=True)
+        project.try_auto_complete(tasks)
         assert project.completed is True
 
     def test_auto_complete_enabled_emits_event(self, project: Project):
+        project.auto_complete = True
         tasks = [make_completed_task(project)]
-        project.try_auto_complete(tasks, auto_complete_enabled=True)
+        project.try_auto_complete(tasks)
         events = project.pull_events()
         assert any(isinstance(e, ProjectCompleted) for e in events)
 
     def test_auto_complete_disabled_does_nothing(self, project: Project):
+        project.auto_complete = False
         tasks = [make_completed_task(project)]
-        project.try_auto_complete(tasks, auto_complete_enabled=False)
+        project.try_auto_complete(tasks)
         assert project.completed is False
         assert project.pull_events() == []
 
     def test_auto_complete_with_open_task_does_not_complete(self, project: Project):
+        project.auto_complete = True
         tasks = [make_completed_task(project), make_open_task(project)]
-        project.try_auto_complete(tasks, auto_complete_enabled=True)
+        project.try_auto_complete(tasks)
         assert project.completed is False
 
     def test_auto_complete_empty_task_list_does_nothing(self, project: Project):
-        project.try_auto_complete([], auto_complete_enabled=True)
+        project.auto_complete = True
+        project.try_auto_complete([])
         assert project.completed is False
 
 

@@ -17,6 +17,7 @@ class Project:
     id: UUID = field(default_factory=uuid4)
     owner_id: Optional[UUID] = None
     completed: bool = False
+    auto_complete: bool = False
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     _pending_events: list = field(default_factory=list, init=False, repr=False, compare=False)
@@ -60,9 +61,9 @@ class Project:
             self.completed = False
             self.updated_at = datetime.now(timezone.utc)
 
-    def try_auto_complete(self, tasks: List["Task"], auto_complete_enabled: bool) -> None:
-        """Mark project complete if all tasks are done and the feature flag is on."""
-        if auto_complete_enabled and tasks and all(t.completed for t in tasks):
+    def try_auto_complete(self, tasks: List["Task"]) -> None:
+        """Mark project complete if all tasks are done and the per-project flag is on."""
+        if self.auto_complete and tasks and all(t.completed for t in tasks):
             self.mark_complete(tasks)
 
     def pull_events(self) -> list:

@@ -134,27 +134,13 @@ class TestCompleteTask:
             task_service.complete_task(uuid4())
 
     def test_auto_complete_project_when_flag_enabled(
-        self, db_session, notifications, project_service: ProjectService
+        self, task_service: TaskService, project_service: ProjectService
     ):
-        from config import Config
-        from infrastructure.db.project_repository import SQLiteProjectRepository
-        from infrastructure.db.task_repository import SQLiteTaskRepository
-
-        from infrastructure.db.user_repository import SQLiteUserRepository
-
-        cfg = Config()
-        cfg.AUTO_COMPLETE_PROJECT = True
-        svc = TaskService(
-            task_repo=SQLiteTaskRepository(db_session),
-            project_repo=SQLiteProjectRepository(db_session),
-            user_repo=SQLiteUserRepository(db_session),
-            notifications=notifications,
-            config=cfg,
-        )
         project = project_service.create_project(title="P", deadline=future(10))
-        t = svc.create_task(title="T", deadline=future(5))
-        svc.link_task_to_project(t.id, project.id)
-        svc.complete_task(t.id)
+        project_service.update_project(project.id, auto_complete=True)
+        t = task_service.create_task(title="T", deadline=future(5))
+        task_service.link_task_to_project(t.id, project.id)
+        task_service.complete_task(t.id)
 
         updated_project = project_service.get_project(project.id)
         assert updated_project.completed is True

@@ -75,7 +75,22 @@ class TaskService:
         elif status == "in_progress":
             task.set_in_progress()
         saved = self._task_repo.save(task)
-        self._notifications.dispatch_all(task.pull_events())
+
+        events = task.pull_events()
+        self._notifications.dispatch_all(events)
+
+        # Re-opening a task in a completed project sets the project back to open
+        for event in events:
+            if isinstance(event, TaskReopened) and event.project_id:
+                project = self._project_repo.find_by_id(event.project_id)
+                if project and project.completed:
+                    project.reopen()
+                    self._project_repo.save(project)
+
+        # If completed, attempt auto-completion of the parent project
+        if status == "completed" and saved.project_id:
+            self._try_auto_complete_project(saved.project_id)
+
         return saved
 
     def update_task(
@@ -172,7 +187,7 @@ class TaskService:
         if project is None or project.completed:
             return
         project_tasks = self._task_repo.find_by_project(project_id)
-        project.try_auto_complete(project_tasks, self._config.AUTO_COMPLETE_PROJECT)
+        project.try_auto_complete(project_tasks)
         project_events = project.pull_events()
         if project_events:
             self._project_repo.save(project)

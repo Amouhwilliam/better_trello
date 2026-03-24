@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Kanban, Clock } from "lucide-react";
+import { ArrowLeft, Kanban, Clock, CheckCircle2 } from "lucide-react";
 import { cookies } from "next/headers";
 import { BoardClient } from "./BoardClient";
 
@@ -18,6 +18,7 @@ async function getProject(id: string, token?: string) {
     title: string;
     deadline: string;
     completed: boolean;
+    auto_complete: boolean;
     owner_id: string | null;
   }>;
 }
@@ -60,9 +61,17 @@ export default async function ProjectBoardPage({
             <span className="font-semibold text-slate-800">{project.title}</span>
           </div>
 
-          <div className="flex items-center gap-1.5 text-xs text-slate-400 ml-auto">
-            <Clock className="h-3.5 w-3.5" />
-            Due {deadline.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+          <div className="flex items-center gap-3 ml-auto">
+            {project.completed && (
+              <span className="flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Completed
+              </span>
+            )}
+            <div className="flex items-center gap-1.5 text-xs text-slate-400">
+              <Clock className="h-3.5 w-3.5" />
+              Due {deadline.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+            </div>
           </div>
         </div>
       </header>
@@ -74,6 +83,8 @@ export default async function ProjectBoardPage({
           userId={userId}
           projectTitle={project.title}
           projectDeadline={project.deadline}
+          projectCompleted={project.completed}
+          projectAutoComplete={project.auto_complete}
         />
       </main>
     </div>
