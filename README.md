@@ -52,7 +52,13 @@ docker compose up --build
 | API Docs       | http://localhost:8000/docs  |
 | Datasette (DB) | http://localhost:8081       |
 
-A default admin user is seeded on first start. Credentials are printed in the API container logs.
+A default admin user is seeded on first start:
+
+| Field    | Value               |
+|----------|---------------------|
+| Email    | admin@example.com   |
+| Password | admin123            |
+| Name     | Admin User          |
 
 ### Stop all services
 

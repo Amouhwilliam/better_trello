@@ -81,12 +81,72 @@ class TestListProjects:
     def test_returns_200(self, client: TestClient):
         r = client.get("/projects")
         assert r.status_code == 200
-        assert isinstance(r.json(), list)
+        body = r.json()
+        assert "items" in body
+        assert "total" in body
+        assert "page" in body
+        assert "page_size" in body
+        assert "has_more" in body
 
     def test_includes_created_project(self, client: TestClient):
         p = create_project(client, title="ListMe")
-        ids = [x["id"] for x in client.get("/projects").json()]
+        ids = [x["id"] for x in client.get("/projects").json()["items"]]
         assert p["id"] in ids
+
+
+# ---------------------------------------------------------------------------
+# GET /projects — pagination
+# ---------------------------------------------------------------------------
+
+class TestListProjectsPaginated:
+    def test_default_page_is_1(self, client: TestClient):
+        r = client.get("/projects")
+        assert r.json()["page"] == 1
+
+    def test_default_page_size_is_10(self, client: TestClient):
+        r = client.get("/projects")
+        assert r.json()["page_size"] == 10
+
+    def test_total_reflects_all_projects(self, client: TestClient):
+        for i in range(3):
+            create_project(client, title=f"PagTotal{i}")
+        total = client.get("/projects").json()["total"]
+        assert total >= 3
+
+    def test_page_size_limits_items(self, client: TestClient):
+        for i in range(5):
+            create_project(client, title=f"PagSize{i}")
+        items = client.get("/projects?page_size=2").json()["items"]
+        assert len(items) <= 2
+
+    def test_second_page_returns_next_items(self, client: TestClient):
+        for i in range(4):
+            create_project(client, title=f"PagPage{i}")
+        page1 = client.get("/projects?page=1&page_size=2").json()["items"]
+        page2 = client.get("/projects?page=2&page_size=2").json()["items"]
+        ids1 = {x["id"] for x in page1}
+        ids2 = {x["id"] for x in page2}
+        assert ids1.isdisjoint(ids2)
+
+    def test_has_more_true_when_more_pages_exist(self, client: TestClient):
+        for i in range(3):
+            create_project(client, title=f"HasMore{i}")
+        body = client.get("/projects?page=1&page_size=1").json()
+        assert body["has_more"] is True
+
+    def test_has_more_false_on_last_page(self, client: TestClient):
+        create_project(client, title="LastPage")
+        total = client.get("/projects").json()["total"]
+        body = client.get(f"/projects?page=1&page_size={total}").json()
+        assert body["has_more"] is False
+
+    def test_invalid_page_returns_422(self, client: TestClient):
+        r = client.get("/projects?page=0")
+        assert r.status_code == 422
+
+    def test_invalid_page_size_returns_422(self, client: TestClient):
+        r = client.get("/projects?page_size=0")
+        assert r.status_code == 422
 
 
 # ---------------------------------------------------------------------------

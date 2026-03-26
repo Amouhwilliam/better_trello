@@ -60,6 +60,14 @@ export interface CreateProjectPayload {
   owner_id?: string;
 }
 
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  page_size: number;
+  has_more: boolean;
+}
+
 export type TaskStatus = "todo" | "in_progress" | "completed";
 
 export interface Task {
@@ -85,13 +93,15 @@ export interface CreateTaskPayload {
 export const api = {
   users: {
     me: () => request<User>("/users/me"),
-    list: () => request<User[]>("/users"),
+    list: (page = 1, pageSize = 6) =>
+      request<PaginatedResponse<User>>(`/users?page=${page}&page_size=${pageSize}`),
     get: (id: string) => request<User>(`/users/${id}`),
     create: (payload: CreateUserPayload) =>
       request<User>("/users", { method: "POST", body: JSON.stringify(payload) }),
   },
   projects: {
-    list: () => request<Project[]>("/projects"),
+    list: (page = 1, pageSize = 6) =>
+      request<PaginatedResponse<Project>>(`/projects?page=${page}&page_size=${pageSize}`),
     get: (id: string) => request<Project>(`/projects/${id}`),
     create: (payload: CreateProjectPayload) =>
       request<Project>("/projects", { method: "POST", body: JSON.stringify(payload) }),
@@ -102,13 +112,14 @@ export const api = {
     tasks: (id: string) => request<Task[]>(`/projects/${id}/tasks`),
   },
   tasks: {
-    list: (params?: { completed?: boolean; overdue?: boolean; project_id?: string }) => {
+    list: (params?: { completed?: boolean; overdue?: boolean; project_id?: string; page?: number; page_size?: number }) => {
       const qs = new URLSearchParams();
       if (params?.completed !== undefined) qs.set("completed", String(params.completed));
       if (params?.overdue !== undefined) qs.set("overdue", String(params.overdue));
       if (params?.project_id) qs.set("project_id", params.project_id);
-      const query = qs.toString();
-      return request<Task[]>(`/tasks${query ? `?${query}` : ""}`);
+      qs.set("page", String(params?.page ?? 1));
+      qs.set("page_size", String(params?.page_size ?? 15));
+      return request<PaginatedResponse<Task>>(`/tasks?${qs.toString()}`);
     },
     create: (payload: CreateTaskPayload) =>
       request<Task>("/tasks", { method: "POST", body: JSON.stringify(payload) }),

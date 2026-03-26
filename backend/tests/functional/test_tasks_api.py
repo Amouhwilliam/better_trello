@@ -80,29 +80,34 @@ class TestListTasks:
     def test_returns_200(self, client: TestClient):
         r = client.get("/tasks")
         assert r.status_code == 200
-        assert isinstance(r.json(), list)
+        body = r.json()
+        assert "items" in body
+        assert "total" in body
+        assert "page" in body
+        assert "page_size" in body
+        assert "has_more" in body
 
     def test_includes_created_task(self, client: TestClient):
         t = create_task(client, title="ListMe")
-        ids = [x["id"] for x in client.get("/tasks").json()]
+        ids = [x["id"] for x in client.get("/tasks").json()["items"]]
         assert t["id"] in ids
 
     def test_filter_completed_true(self, client: TestClient):
         t = create_task(client, title="CompletedFilter")
         client.patch(f"/tasks/{t['id']}/complete")
-        results = client.get("/tasks?completed=true").json()
+        results = client.get("/tasks?completed=true").json()["items"]
         assert all(x["completed"] for x in results)
         assert any(x["id"] == t["id"] for x in results)
 
     def test_filter_completed_false(self, client: TestClient):
         create_task(client, title="OpenFilter")
-        results = client.get("/tasks?completed=false").json()
+        results = client.get("/tasks?completed=false").json()["items"]
         assert all(not x["completed"] for x in results)
 
     def test_filter_overdue(self, client: TestClient):
         r = client.post("/tasks", json={"title": "OverdueFilter", "deadline": past(2)})
         assert r.status_code == 201
-        results = client.get("/tasks?overdue=true").json()
+        results = client.get("/tasks?overdue=true").json()["items"]
         assert all(not x["completed"] for x in results)
         assert any(x["id"] == r.json()["id"] for x in results)
 
@@ -110,9 +115,64 @@ class TestListTasks:
         project = create_project(client)
         t = create_task(client, title="ProjectFilter", days=10)
         client.post(f"/projects/{project['id']}/tasks/{t['id']}/link")
-        results = client.get(f"/tasks?project_id={project['id']}").json()
+        results = client.get(f"/tasks?project_id={project['id']}").json()["items"]
         assert len(results) >= 1
         assert all(x["project_id"] == project["id"] for x in results)
+
+
+# ---------------------------------------------------------------------------
+# GET /tasks — pagination
+# ---------------------------------------------------------------------------
+
+class TestListTasksPaginated:
+    def test_default_page_is_1(self, client: TestClient):
+        r = client.get("/tasks")
+        assert r.json()["page"] == 1
+
+    def test_default_page_size_is_15(self, client: TestClient):
+        r = client.get("/tasks")
+        assert r.json()["page_size"] == 15
+
+    def test_total_reflects_all_tasks(self, client: TestClient):
+        for i in range(3):
+            create_task(client, title=f"PagTotal{i}")
+        total = client.get("/tasks").json()["total"]
+        assert total >= 3
+
+    def test_page_size_limits_items(self, client: TestClient):
+        for i in range(5):
+            create_task(client, title=f"PagSize{i}")
+        items = client.get("/tasks?page_size=2").json()["items"]
+        assert len(items) <= 2
+
+    def test_second_page_returns_next_items(self, client: TestClient):
+        for i in range(4):
+            create_task(client, title=f"PagPage{i}")
+        page1 = client.get("/tasks?page=1&page_size=2").json()["items"]
+        page2 = client.get("/tasks?page=2&page_size=2").json()["items"]
+        ids1 = {x["id"] for x in page1}
+        ids2 = {x["id"] for x in page2}
+        assert ids1.isdisjoint(ids2)
+
+    def test_has_more_true_when_more_pages_exist(self, client: TestClient):
+        for i in range(3):
+            create_task(client, title=f"HasMore{i}")
+        body = client.get("/tasks?page=1&page_size=1").json()
+        assert body["has_more"] is True
+
+    def test_has_more_false_on_last_page(self, client: TestClient):
+        create_task(client, title="LastPage")
+        total = client.get("/tasks").json()["total"]
+        body = client.get(f"/tasks?page=1&page_size={total}").json()
+        assert body["has_more"] is False
+
+    def test_invalid_page_returns_422(self, client: TestClient):
+        r = client.get("/tasks?page=0")
+        assert r.status_code == 422
+
+    def test_invalid_page_size_returns_422(self, client: TestClient):
+        r = client.get("/tasks?page_size=0")
+        assert r.status_code == 422
 
 
 # ---------------------------------------------------------------------------

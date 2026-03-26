@@ -1,10 +1,10 @@
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 
 from api.dependencies import get_current_user_id, get_project_service, get_task_service
-from api.schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate
+from api.schemas.project import PaginatedProjectsResponse, ProjectCreate, ProjectResponse, ProjectUpdate
 from api.schemas.task import TaskResponse
 from application.project_service import ProjectService
 from application.task_service import TaskService
@@ -14,11 +14,27 @@ router = APIRouter(prefix="/projects", tags=["Projects"])
 
 @router.get(
     "",
-    response_model=List[ProjectResponse],
-    summary="List all projects",
+    response_model=PaginatedProjectsResponse,
+    summary="List projects (paginated)",
+    description="Returns a paginated list of projects. Use `page` and `page_size` to navigate.",
 )
-def list_projects(service: ProjectService = Depends(get_project_service), _: UUID = Depends(get_current_user_id)):
-    return [ProjectResponse.from_domain(p) for p in service.get_all_projects()]
+def list_projects(
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(10, ge=1, le=100, description="Number of projects per page"),
+    service: ProjectService = Depends(get_project_service),
+    _: UUID = Depends(get_current_user_id),
+):
+    all_projects = service.get_all_projects()
+    total = len(all_projects)
+    skip = (page - 1) * page_size
+    items = all_projects[skip : skip + page_size]
+    return PaginatedProjectsResponse(
+        items=[ProjectResponse.from_domain(p) for p in items],
+        total=total,
+        page=page,
+        page_size=page_size,
+        has_more=(skip + page_size) < total,
+    )
 
 
 @router.get(

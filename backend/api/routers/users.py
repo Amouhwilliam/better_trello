@@ -1,10 +1,10 @@
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 
 from api.dependencies import get_current_user_id, get_user_service
-from api.schemas.user import UserCreate, UserResponse, UserUpdate
+from api.schemas.user import PaginatedUsersResponse, UserCreate, UserResponse, UserUpdate
 from application.user_service import UserService
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -24,11 +24,27 @@ def get_me(
 
 @router.get(
     "",
-    response_model=List[UserResponse],
-    summary="List all users",
+    response_model=PaginatedUsersResponse,
+    summary="List users (paginated)",
+    description="Returns a paginated list of users.",
 )
-def list_users(service: UserService = Depends(get_user_service), _: UUID = Depends(get_current_user_id)):
-    return [UserResponse.from_domain(u) for u in service.get_all_users()]
+def list_users(
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(6, ge=1, le=100, description="Number of users per page"),
+    service: UserService = Depends(get_user_service),
+    _: UUID = Depends(get_current_user_id),
+):
+    all_users = service.get_all_users()
+    total = len(all_users)
+    skip = (page - 1) * page_size
+    items = all_users[skip : skip + page_size]
+    return PaginatedUsersResponse(
+        items=[UserResponse.from_domain(u) for u in items],
+        total=total,
+        page=page,
+        page_size=page_size,
+        has_more=(skip + page_size) < total,
+    )
 
 
 @router.get(

@@ -120,12 +120,65 @@ class TestListUsers:
     def test_returns_200(self, client: TestClient):
         r = client.get("/users")
         assert r.status_code == 200
-        assert isinstance(r.json(), list)
+        body = r.json()
+        assert "items" in body
+        assert "total" in body
+        assert "page" in body
+        assert "page_size" in body
+        assert "has_more" in body
 
     def test_includes_created_user(self, client: TestClient):
         u = create_user(client, email="u_list@x.com")
-        ids = [x["id"] for x in client.get("/users").json()]
+        ids = [x["id"] for x in client.get("/users").json()["items"]]
         assert u["id"] in ids
+
+
+# ---------------------------------------------------------------------------
+# GET /users — pagination
+# ---------------------------------------------------------------------------
+
+class TestListUsersPaginated:
+    def test_default_page_is_1(self, client: TestClient):
+        assert client.get("/users").json()["page"] == 1
+
+    def test_default_page_size_is_6(self, client: TestClient):
+        assert client.get("/users").json()["page_size"] == 6
+
+    def test_total_reflects_all_users(self, client: TestClient):
+        for i in range(3):
+            create_user(client, email=f"u_pag_total{i}@x.com")
+        assert client.get("/users").json()["total"] >= 3
+
+    def test_page_size_limits_items(self, client: TestClient):
+        for i in range(5):
+            create_user(client, email=f"u_pag_size{i}@x.com")
+        items = client.get("/users?page_size=2").json()["items"]
+        assert len(items) <= 2
+
+    def test_second_page_returns_next_items(self, client: TestClient):
+        for i in range(4):
+            create_user(client, email=f"u_pag_page{i}@x.com")
+        p1 = {x["id"] for x in client.get("/users?page=1&page_size=2").json()["items"]}
+        p2 = {x["id"] for x in client.get("/users?page=2&page_size=2").json()["items"]}
+        assert p1.isdisjoint(p2)
+
+    def test_has_more_true_when_more_pages_exist(self, client: TestClient):
+        for i in range(3):
+            create_user(client, email=f"u_has_more{i}@x.com")
+        body = client.get("/users?page=1&page_size=1").json()
+        assert body["has_more"] is True
+
+    def test_has_more_false_on_last_page(self, client: TestClient):
+        create_user(client, email="u_last_page@x.com")
+        total = client.get("/users").json()["total"]
+        body = client.get(f"/users?page=1&page_size={total}").json()
+        assert body["has_more"] is False
+
+    def test_invalid_page_returns_422(self, client: TestClient):
+        assert client.get("/users?page=0").status_code == 422
+
+    def test_invalid_page_size_returns_422(self, client: TestClient):
+        assert client.get("/users?page_size=0").status_code == 422
 
 
 # ---------------------------------------------------------------------------

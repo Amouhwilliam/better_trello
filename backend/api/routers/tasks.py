@@ -1,11 +1,11 @@
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel
 
 from api.dependencies import get_current_user_id, get_task_service
-from api.schemas.task import TaskCreate, TaskResponse, TaskUpdate
+from api.schemas.task import PaginatedTasksResponse, TaskCreate, TaskResponse, TaskUpdate
 from application.task_service import TaskService
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
@@ -13,19 +13,30 @@ router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
 @router.get(
     "",
-    response_model=List[TaskResponse],
-    summary="List all tasks",
-    description="Returns all tasks. Optionally filter by completion status, overdue state, or project.",
+    response_model=PaginatedTasksResponse,
+    summary="List tasks (paginated)",
+    description="Returns a paginated list of tasks. Supports filtering by completion status, overdue state, or project.",
 )
 def list_tasks(
     completed: Optional[bool] = None,
     overdue: Optional[bool] = None,
     project_id: Optional[UUID] = None,
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(15, ge=1, le=100, description="Number of tasks per page"),
     service: TaskService = Depends(get_task_service),
     _: UUID = Depends(get_current_user_id),
 ):
-    tasks = service.get_all_tasks(completed=completed, overdue=overdue, project_id=project_id)
-    return [TaskResponse.from_domain(t) for t in tasks]
+    all_tasks = service.get_all_tasks(completed=completed, overdue=overdue, project_id=project_id)
+    total = len(all_tasks)
+    skip = (page - 1) * page_size
+    items = all_tasks[skip : skip + page_size]
+    return PaginatedTasksResponse(
+        items=[TaskResponse.from_domain(t) for t in items],
+        total=total,
+        page=page,
+        page_size=page_size,
+        has_more=(skip + page_size) < total,
+    )
 
 
 @router.get(

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -41,3 +41,11 @@ class ProjectResponse(BaseModel):
             created_at=project.created_at,
             updated_at=project.updated_at,
         )
+
+
+class PaginatedProjectsResponse(BaseModel):
+    items: List[ProjectResponse]
+    total: int
+    page: int
+    page_size: int
+    has_more: bool

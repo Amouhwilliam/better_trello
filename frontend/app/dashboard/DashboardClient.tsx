@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -45,6 +45,16 @@ export function DashboardClient() {
   const [showContributorPassword, setShowContributorPassword] = useState(false);
   const queryClient = useQueryClient();
 
+  const switchTab = (next: Tab) => {
+    const keyMap: Record<Tab, string[]> = {
+      projects: ["projects"],
+      contributors: ["users"],
+      tasks: ["all-tasks"],
+    };
+    keyMap[next].forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
+    setTab(next);
+  };
+
   const { data: currentUser } = useQuery({
     queryKey: ["me"],
     queryFn: () => api.users.me(),
@@ -52,26 +62,81 @@ export function DashboardClient() {
 
   const userId = currentUser?.id ?? "";
 
-  const { data: projects = [], isLoading: loadingProjects } = useQuery({
+  const {
+    data: projectsData,
+    isLoading: loadingProjects,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ["projects"],
-    queryFn: () => api.projects.list(),
+    queryFn: ({ pageParam }) => api.projects.list(pageParam as number),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => lastPage.has_more ? lastPage.page + 1 : undefined,
   });
 
-  const { data: users = [], isLoading: loadingUsers } = useQuery({
+  const projects = projectsData?.pages.flatMap((p) => p.items) ?? [];
+  const projectsTotal = projectsData?.pages[0]?.total ?? 0;
+
+  const projectSentinelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = projectSentinelRef.current;
+    if (!el || !hasNextPage) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !isFetchingNextPage) fetchNextPage();
+      },
+      { threshold: 0.1 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  const {
+    data: usersData,
+    isLoading: loadingUsers,
+    fetchNextPage: fetchNextUserPage,
+    hasNextPage: hasNextUserPage,
+    isFetchingNextPage: isFetchingNextUserPage,
+  } = useInfiniteQuery({
     queryKey: ["users"],
-    queryFn: () => api.users.list(),
+    queryFn: ({ pageParam }) => api.users.list(pageParam as number),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => lastPage.has_more ? lastPage.page + 1 : undefined,
     enabled: tab === "contributors" || tab === "tasks",
   });
 
-  const { data: allTasks = [], isLoading: loadingTasks } = useQuery({
-    queryKey: ["all-tasks"],
-    queryFn: () => api.tasks.list(),
+  const users = usersData?.pages.flatMap((p) => p.items) ?? [];
+  const usersTotal = usersData?.pages[0]?.total ?? 0;
+
+  const userSentinelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = userSentinelRef.current;
+    if (!el || !hasNextUserPage) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !isFetchingNextUserPage) fetchNextUserPage();
+      },
+      { threshold: 0.1 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasNextUserPage, isFetchingNextUserPage, fetchNextUserPage]);
+
+  const [taskPage, setTaskPage] = useState(1);
+  const TASKS_PER_PAGE = 15;
+
+  const { data: tasksData, isLoading: loadingTasks } = useQuery({
+    queryKey: ["all-tasks", taskPage],
+    queryFn: () => api.tasks.list({ page: taskPage, page_size: TASKS_PER_PAGE }),
     enabled: tab === "tasks",
   });
 
+  const allTasks = tasksData?.items ?? [];
+  const tasksTotal = tasksData?.total ?? 0;
+  const totalTaskPages = Math.max(1, Math.ceil(tasksTotal / TASKS_PER_PAGE));
+
   const [editingTaskProject, setEditingTaskProject] = useState<Task | null>(null);
-  const [taskPage, setTaskPage] = useState(1);
-  const TASKS_PER_PAGE = 15;
 
   // ── Project form ──
   const {
@@ -170,7 +235,7 @@ export function DashboardClient() {
         {(["projects", "contributors", "tasks"] as Tab[]).map((t) => (
           <button
             key={t}
-            onClick={() => setTab(t)}
+            onClick={() => switchTab(t)}
             className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium capitalize transition-colors border-b-2 -mb-px ${
               tab === t
                 ? "border-indigo-600 text-indigo-600"
@@ -188,7 +253,7 @@ export function DashboardClient() {
         <>
           <div className="mb-6 flex items-center justify-between">
             <p className="text-sm text-slate-500">
-              {projects.length === 0 ? "No projects yet." : `${projects.length} project${projects.length > 1 ? "s" : ""}`}
+              {projectsTotal === 0 ? "No projects yet." : `${projectsTotal} project${projectsTotal > 1 ? "s" : ""}`}
             </p>
             <Button onClick={() => setProjectModalOpen(true)} className="h-9 gap-2 bg-indigo-600 text-white hover:bg-indigo-700">
               <Plus className="h-4 w-4" />
@@ -206,11 +271,19 @@ export function DashboardClient() {
               <p className="text-sm">Create your first project to get started.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {projects.map((p, i) => (
-                <ProjectCard key={p.id} project={p} colorIndex={i} />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {projects.map((p, i) => (
+                  <ProjectCard key={p.id} project={p} colorIndex={i} />
+                ))}
+              </div>
+              <div ref={projectSentinelRef} className="h-4" />
+              {isFetchingNextPage && (
+                <div className="flex justify-center py-4">
+                  <Loader2 className="h-5 w-5 animate-spin text-slate-300" />
+                </div>
+              )}
+            </>
           )}
         </>
       )}
@@ -220,7 +293,7 @@ export function DashboardClient() {
         <>
           <div className="mb-6 flex items-center justify-between">
             <p className="text-sm text-slate-500">
-              {users.length === 0 ? "No contributors yet." : `${users.length} contributor${users.length > 1 ? "s" : ""}`}
+              {usersTotal === 0 ? "No contributors yet." : `${usersTotal} contributor${usersTotal > 1 ? "s" : ""}`}
             </p>
             <Button onClick={() => setUserModalOpen(true)} className="h-9 gap-2 bg-indigo-600 text-white hover:bg-indigo-700">
               <Plus className="h-4 w-4" />
@@ -238,106 +311,109 @@ export function DashboardClient() {
               <p className="text-sm">No contributors yet. Add the first one.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {users.map((u) => (
-                <UserCard key={u.id} user={u} isCurrentUser={u.id === userId} />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {users.map((u) => (
+                  <UserCard key={u.id} user={u} isCurrentUser={u.id === userId} />
+                ))}
+              </div>
+              <div ref={userSentinelRef} className="h-4" />
+              {isFetchingNextUserPage && (
+                <div className="flex justify-center py-4">
+                  <Loader2 className="h-5 w-5 animate-spin text-slate-300" />
+                </div>
+              )}
+            </>
           )}
         </>
       )}
 
       {/* Tasks tab */}
-      {tab === "tasks" && (() => {
-        const totalPages = Math.max(1, Math.ceil(allTasks.length / TASKS_PER_PAGE));
-        const pageTasks = allTasks.slice((taskPage - 1) * TASKS_PER_PAGE, taskPage * TASKS_PER_PAGE);
-        return (
-          <>
-            <div className="mb-6 flex items-center justify-between">
-              <p className="text-sm text-slate-500">
-                {allTasks.length === 0
-                  ? "No tasks yet."
-                  : `${allTasks.length} task${allTasks.length > 1 ? "s" : ""} across all projects`}
-              </p>
+      {tab === "tasks" && (
+        <>
+          <div className="mb-6 flex items-center justify-between">
+            <p className="text-sm text-slate-500">
+              {tasksTotal === 0
+                ? "No tasks yet."
+                : `${tasksTotal} task${tasksTotal > 1 ? "s" : ""} across all projects`}
+            </p>
+          </div>
+
+          {loadingTasks ? (
+            <div className="flex justify-center py-16">
+              <Loader2 className="h-6 w-6 animate-spin text-slate-300" />
             </div>
-
-            {loadingTasks ? (
-              <div className="flex justify-center py-16">
-                <Loader2 className="h-6 w-6 animate-spin text-slate-300" />
+          ) : allTasks.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white/50 py-16 text-slate-400">
+              <ListTodo className="mb-3 h-10 w-10 opacity-30" />
+              <p className="text-sm">No tasks found on the platform.</p>
+            </div>
+          ) : (
+            <>
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50">
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Title</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Due date</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Assignee</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Project</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {allTasks.map((task) => (
+                      <TaskRow
+                        key={task.id}
+                        task={task}
+                        assignee={task.assignee_id ? users.find((u) => u.id === task.assignee_id) : undefined}
+                        project={task.project_id ? projects.find((p) => p.id === task.project_id) : undefined}
+                        onEditProject={() => setEditingTaskProject(task)}
+                      />
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            ) : allTasks.length === 0 ? (
-              <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white/50 py-16 text-slate-400">
-                <ListTodo className="mb-3 h-10 w-10 opacity-30" />
-                <p className="text-sm">No tasks found on the platform.</p>
-              </div>
-            ) : (
-              <>
-                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-100 bg-slate-50">
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Title</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Due date</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Assignee</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Project</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {pageTasks.map((task) => (
-                        <TaskRow
-                          key={task.id}
-                          task={task}
-                          assignee={task.assignee_id ? users.find((u) => u.id === task.assignee_id) : undefined}
-                          project={task.project_id ? projects.find((p) => p.id === task.project_id) : undefined}
-                          onEditProject={() => setEditingTaskProject(task)}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {totalPages > 1 && (
-                  <div className="mt-4 flex items-center justify-between">
-                    <p className="text-xs text-slate-400">
-                      Showing {(taskPage - 1) * TASKS_PER_PAGE + 1}–{Math.min(taskPage * TASKS_PER_PAGE, allTasks.length)} of {allTasks.length}
-                    </p>
-                    <div className="flex items-center gap-1">
+              {totalTaskPages > 1 && (
+                <div className="mt-4 flex items-center justify-between">
+                  <p className="text-xs text-slate-400">
+                    Showing {(taskPage - 1) * TASKS_PER_PAGE + 1}–{Math.min(taskPage * TASKS_PER_PAGE, tasksTotal)} of {tasksTotal}
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setTaskPage((p) => Math.max(1, p - 1))}
+                      disabled={taskPage === 1}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-colors hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      ‹
+                    </button>
+                    {Array.from({ length: totalTaskPages }, (_, i) => i + 1).map((p) => (
                       <button
-                        onClick={() => setTaskPage((p) => Math.max(1, p - 1))}
-                        disabled={taskPage === 1}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-colors hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                        key={p}
+                        onClick={() => setTaskPage(p)}
+                        className={`flex h-8 w-8 items-center justify-center rounded-lg border text-xs font-medium transition-colors ${
+                          p === taskPage
+                            ? "border-indigo-600 bg-indigo-600 text-white"
+                            : "border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:text-indigo-600"
+                        }`}
                       >
-                        ‹
+                        {p}
                       </button>
-                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                        <button
-                          key={p}
-                          onClick={() => setTaskPage(p)}
-                          className={`flex h-8 w-8 items-center justify-center rounded-lg border text-xs font-medium transition-colors ${
-                            p === taskPage
-                              ? "border-indigo-600 bg-indigo-600 text-white"
-                              : "border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:text-indigo-600"
-                          }`}
-                        >
-                          {p}
-                        </button>
-                      ))}
-                      <button
-                        onClick={() => setTaskPage((p) => Math.min(totalPages, p + 1))}
-                        disabled={taskPage === totalPages}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-colors hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        ›
-                      </button>
-                    </div>
+                    ))}
+                    <button
+                      onClick={() => setTaskPage((p) => Math.min(totalTaskPages, p + 1))}
+                      disabled={taskPage === totalTaskPages}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-colors hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      ›
+                    </button>
                   </div>
-                )}
-              </>
-            )}
-          </>
-        );
-      })()}
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
 
       {/* Task project edit modal */}
       {editingTaskProject && (
