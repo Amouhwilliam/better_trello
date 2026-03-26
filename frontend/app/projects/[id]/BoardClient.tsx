@@ -73,11 +73,12 @@ export function BoardClient({
     refetchOnMount: "always",
   });
 
-  const { data: users = [] } = useQuery({
-    queryKey: ["users"],
-    queryFn: () => api.users.list(),
+  const { data: usersData } = useQuery({
+    queryKey: ["board-users"],
+    queryFn: () => api.users.list(1, 100),
   });
 
+  const users = usersData?.items ?? [];
   const usersById = Object.fromEntries(users.map((u) => [u.id, u]));
 
   const { mutate: moveTask } = useMutation({
